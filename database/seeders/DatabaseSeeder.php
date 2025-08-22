@@ -30,7 +30,6 @@ class DatabaseSeeder extends Seeder
             BirthdayCouponSeeder::class,
             LocationSeeder::class,
             RouteSeeder::class,
-            TripSeeder::class,
             TripStationSeeder::class,
             BusSeeder::class,
             SeatSeeder::class,
