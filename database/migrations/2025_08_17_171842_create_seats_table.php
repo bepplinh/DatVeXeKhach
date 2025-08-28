@@ -9,12 +9,15 @@ return new class extends Migration {
         Schema::create('seats', function (Blueprint $table) {
             $table->id();
             $table->foreignId('bus_id')->constrained()->cascadeOnDelete();
-            $table->string('seat_number'); // A1..D10...
-            $table->string('deck')->nullable();
-            $table->json('position_meta')->nullable();
+            $table->string('seat_number');
+            $table->unsignedTinyInteger('deck')->default(2);
+            $table->enum('column_group', ['left', 'middle', 'right']);
+            $table->unsignedTinyInteger('index_in_column'); // số thứ tự trong cột
+
+            $table->boolean('active')->default(true);
             $table->timestamps();
             
-            $table->unique(['bus_id','seat_number']);
+            $table->unique(['bus_id','seat_number', 'deck']);
         });
     }
     public function down(): void {

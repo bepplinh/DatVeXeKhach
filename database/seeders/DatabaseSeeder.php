@@ -31,6 +31,7 @@ class DatabaseSeeder extends Seeder
             LocationSeeder::class,
             RouteSeeder::class,
             TripStationSeeder::class,
+            SeatLayoutTemplateSeeder::class,
             BusSeeder::class,
             SeatSeeder::class,
             CouponUserSeeder::class,

@@ -18,6 +18,7 @@ class StoreBusRequest extends FormRequest
             'name' => 'required|string|max:255',
             'plate_number' => 'required|string|max:20|unique:buses,plate_number',
             'type_bus_id' => 'required|exists:type_buses,id',
+            'seat_layout_template_id' => ['required','integer','exists:seat_layout_templates,id'],
         ];
     }
 

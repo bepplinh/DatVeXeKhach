@@ -302,3 +302,4 @@ Sau khi deploy thành công, hệ thống sẽ:
 Hệ thống của bạn đã được chuẩn bị đầy đủ và sẽ hoạt động hoàn hảo trên server production. Chỉ cần làm theo hướng dẫn trên là có thể deploy thành công!
 
 **🚀 Hãy bắt đầu với: `bash deploy/setup-cron.sh`**
+

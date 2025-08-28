@@ -13,17 +13,21 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('trip_id');
-            $table->unsignedBigInteger('user_id');
+            $table->string('code')->unique(); 
+            $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('seat_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('coupon_id')->nullable()->constrained('coupons')->nullOnDelete();
-            $table->integer('total_price')->default(0);  // tổng tiền của đơn
-            $table->decimal('discount_amount', 10, 2)->default(0);
+            $table->decimal('total_price', 10, 0)->default(0);
+            $table->decimal('discount_amount', 10, 0)->default(0);
             $table->enum('status', ['pending', 'paid', 'cancelled'])->default('pending');
 
             $table->timestamps();
+            $table->timestamp('paid_at')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
 
-            $table->foreign('trip_id')->references('id')->on('trips')->cascadeOnDelete();
-            $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
+            $table->unique(['trip_id', 'seat_id'], 'uniq_trip_seat');
+            $table->index(['trip_id', 'status']);
         });
     }
 

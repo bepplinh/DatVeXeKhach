@@ -7,11 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 class Booking extends Model
 {
     protected $fillable = [
-        'trip_id',
-        'user_id',
-        'total_price',
-        'status',
-    ];
+        'code','trip_id','seat_id','user_id','coupon_id',
+        'total_price','discount_amount','status','paid_at','cancelled_at'
+      ];
+
+    protected $casts = [
+        'paid_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+      ];
 
     public function trip()
     {

@@ -12,12 +12,14 @@ use App\Repository\LocationRepository;
 use Illuminate\Support\ServiceProvider;
 use App\Repository\TripStationRepository;
 use App\Repository\UserProviderRepository;
+use App\Repository\SeatLayoutTemplateRepository;
 use App\Repository\Interfaces\TripRepositoryInterface;
+
 use App\Repository\Interfaces\UserRepositoryInterface;
 use App\Repository\Interfaces\RouteRepositoryInterface;
-
 use App\Repository\Interfaces\LocationRepositoryInterface;
 use App\Repository\Interfaces\TripStationRepositoryInterface;
+use App\Repository\Interfaces\SeatLayoutTemplateRepositoryInterface;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -39,6 +41,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(RouteRepositoryInterface::class, RouteRepository::class);
         $this->app->bind(TripRepositoryInterface::class, TripRepository::class);
         $this->app->bind(TripStationRepositoryInterface::class, TripStationRepository::class);
+
+        $this->app->bind(SeatLayoutTemplateRepositoryInterface::class, SeatLayoutTemplateRepository::class);
     }
 
 

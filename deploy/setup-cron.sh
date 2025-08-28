@@ -104,3 +104,4 @@ echo ""
 echo "🎉 Hoàn thành thiết lập hệ thống tự động gửi coupon!"
 echo "💡 Hãy cập nhật file .env với thông tin thực tế của bạn"
 echo "🚀 Hệ thống sẽ tự động gửi coupon mỗi ngày lúc 9:00 sáng"
+

@@ -6,12 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
-class User extends Authenticatable
+class User extends Authenticatable implements JWTSubject
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['name', 'username', 'email', 'phone', 'birthday', 'role', 'avatar', 'password'];
+    protected $fillable = ['username', 'email', 'phone', 'birthday', 'role', 'avatar', 'password'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -19,6 +20,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
             'birthday' => 'date',
         ];
@@ -36,5 +38,18 @@ class User extends Authenticatable
         }
 
         return asset('images/default-avatar.png');
+    }
+
+    public function getJWTIdentifier()
+    {
+        return $this->getKey();
+    }
+
+    public function getJWTCustomClaims(): array
+    {
+        // có thể nhúng role/permissions ở đây nếu cần
+        return [
+            'role' => $this->role,
+        ];
     }
 }

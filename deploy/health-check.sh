@@ -238,3 +238,4 @@ echo "2. Chạy: bash deploy/setup-cron.sh"
 echo "3. Cấu hình Supervisor"
 echo "4. Test hệ thống: php artisan coupons:send-birthday"
 echo "5. Kiểm tra logs: tail -f storage/logs/laravel.log"
+
