@@ -1,93 +1,74 @@
 <?php
+
 namespace App\Http\Requests\ScheduleTemplateTrip;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use App\Models\ScheduleTemplateTrip;
 
 class Update_Schedule_Template_Trip_Request extends FormRequest
 {
-    public function authorize(): bool { return true; }
+    public function authorize(): bool
+    {
+        return true;
+    }
 
     public function rules(): array
     {
-        // Lấy id hiện tại (hỗ trợ cả route model binding lẫn id thường)
-        $current = $this->route('schedule_template_trip');
-        $id = is_object($current) ? $current->id : $current;
-
-        $busId = $this->input('bus_id');
-
-        $rules = [
-            'route_id'       => [
-                'sometimes','required','exists:routes,id',
-                Rule::unique('schedule_template_trips','route_id')
-                    ->ignore($id)
-                    ->where(fn($q) => $q
-                        ->where('weekday', $this->input('weekday'))
-                        ->where('departure_time', $this->input('departure_time'))
-                    ),
-            ],
-            'bus_id'         => ['nullable','exists:buses,id'],
-            'weekday'        => ['sometimes','required','integer','between:0,6'],
-            'departure_time' => ['sometimes','required','date_format:H:i'],
-            'active'         => ['sometimes','boolean'],
+        return [
+            'route_id' => 'sometimes|exists:routes,id',
+            'bus_id' => 'sometimes|exists:buses,id',
+            'weekday' => 'sometimes|integer|between:0,6',
+            'departure_time' => 'sometimes|date_format:H:i:s',
+            'active' => 'sometimes|boolean'
         ];
-
-        if ($busId !== null && $busId !== '') {
-            $rules['bus_id'][] =
-                Rule::unique('schedule_template_trips','bus_id')
-                    ->ignore($id)
-                    ->where(fn($q) => $q
-                        ->where('weekday', $this->input('weekday'))
-                        ->where('departure_time', $this->input('departure_time'))
-                    );
-        }
-
-        return $rules;
-    }
-
-    public function withValidator($validator): void
-    {
-        $validator->after(function ($v) {
-            $busId = $this->input('bus_id');
-            if (!$busId) return;
-
-            $current = $this->route('schedule_template_trip');
-            $id = is_object($current) ? $current->id : $current;
-
-            $existsOtherRoute = ScheduleTemplateTrip::query()
-                ->where('id', '!=', $id)
-                ->where('bus_id', $busId)
-                ->where('weekday', $this->input('weekday'))
-                ->where('route_id', '!=', $this->input('route_id'))
-                ->exists();
-
-            if ($existsOtherRoute) {
-                $v->errors()->add(
-                    'bus_id',
-                    'Xe này đã được gán tuyến khác trong cùng thứ. Mỗi xe chỉ được chạy 1 tuyến cho mỗi ngày.'
-                );
-            }
-        });
     }
 
     public function messages(): array
     {
         return [
-            'route_id.unique'            => 'Đã tồn tại mẫu cho tuyến này ở đúng thứ và giờ khởi hành.',
-            'bus_id.unique'              => 'Xe này đã có mẫu ở đúng thứ và giờ khởi hành.',
-            'departure_time.date_format' => 'Giờ khởi hành phải là HH:mm.',
+            'route_id.exists' => 'Tuyến đường không tồn tại',
+            'bus_id.exists' => 'Xe không tồn tại',
+            'weekday.between' => 'Ngày trong tuần phải từ 0-6 (0=Chủ nhật, 1=Thứ 2, ...)',
+            'departure_time.date_format' => 'Giờ khởi hành phải có định dạng HH:mm:ss'
         ];
     }
 
-    public function attributes(): array
+    public function withValidator($validator)
     {
-        return [
-            'route_id'       => 'tuyến',
-            'bus_id'         => 'xe',
-            'weekday'        => 'thứ',
-            'departure_time' => 'giờ khởi hành',
-            'active'         => 'trạng thái',
-        ];
+        $validator->after(function ($validator) {
+            $this->validateNoScheduleConflict($validator);
+        });
+    }
+
+    private function validateNoScheduleConflict($validator)
+    {
+        $busId = $this->input('bus_id');
+        $weekday = $this->input('weekday');
+        $departureTime = $this->input('departure_time');
+        
+        // Nếu không có thay đổi về bus_id, weekday, departure_time thì không cần kiểm tra
+        if (!$busId || !$weekday || !$departureTime) {
+            return;
+        }
+
+        // Lấy ID của template đang update
+        $templateId = $this->route('schedule_template_trip');
+
+        // Kiểm tra xem xe có bị trùng lịch không (loại trừ template hiện tại)
+        $conflicting = ScheduleTemplateTrip::where('bus_id', $busId)
+            ->where('weekday', $weekday)
+            ->where('departure_time', $departureTime)
+            ->where('id', '!=', $templateId)
+            ->exists();
+
+        if ($conflicting) {
+            $weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+            $weekdayName = $weekdayNames[$weekday] ?? 'Không xác định';
+            
+            $validator->errors()->add('departure_time', 
+                "Xe này đã có lịch trình vào {$weekdayName} lúc {$departureTime}. " .
+                "Vui lòng chọn giờ khác hoặc xe khác."
+            );
+        }
     }
 }

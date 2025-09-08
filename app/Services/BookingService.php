@@ -46,7 +46,7 @@ class BookingService
                 $codes[] = $code;
                 
                 // Broadcast event
-                event(new SeatBooked($tripId, $seatId));
+                event(new SeatBooked($tripId, $seatId, $booking->id, $userId));
             }
 
             // Hủy tất cả ghế đang chọn của user sau khi đặt thành công (nếu có)

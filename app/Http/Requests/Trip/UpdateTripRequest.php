@@ -24,9 +24,19 @@ class UpdateTripRequest extends FormRequest
         ];
 
         if ($this->filled('bus_id')) {
-            $rules['departure_time'][] = Rule::unique('trips', 'departure_time')
-                ->ignore($tripId)
-                ->where(fn($q) => $q->where('bus_id', $this->input('bus_id')));
+            $rules['departure_time'][] = function ($attribute, $value, $fail) use ($tripId) {
+                $departureDate = \Carbon\Carbon::parse($value)->format('Y-m-d');
+                $busId = $this->input('bus_id');
+                
+                $existingTrip = \App\Models\Trip::where('bus_id', $busId)
+                    ->whereDate('departure_time', $departureDate)
+                    ->where('id', '!=', $tripId)
+                    ->first();
+                
+                if ($existingTrip) {
+                    $fail('Mỗi xe bus chỉ có thể có một chuyến trong cùng ngày.');
+                }
+            };
         }
 
         return $rules;
@@ -44,7 +54,6 @@ class UpdateTripRequest extends FormRequest
 
             'departure_time.required' => 'Thời gian khởi hành là bắt buộc',
             'departure_time.date_format' => 'Thời gian khởi hành phải theo định dạng YYYY-MM-DD HH:MM:SS',
-            'departure_time.unique' => 'Mỗi xe bus không thể có 2 chuyến cùng thời gian khởi hành',
 
             'status.in' => 'Trạng thái không hợp lệ (scheduled, running, finished, cancelled)'
         ];

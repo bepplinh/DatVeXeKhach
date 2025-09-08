@@ -26,15 +26,18 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call([
+            FakeUserJwtSeeder::class,
             DefaultCouponsSeeder::class,
             BirthdayCouponSeeder::class,
             LocationSeeder::class,
             RouteSeeder::class,
             TripStationSeeder::class,
+            TripSeeder::class,
             SeatLayoutTemplateSeeder::class,
             BusSeeder::class,
             SeatSeeder::class,
             CouponUserSeeder::class,
+            ScheduleTemplateTripSeeder::class,
         ]);
     }
 }

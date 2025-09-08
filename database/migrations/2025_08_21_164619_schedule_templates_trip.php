@@ -18,6 +18,10 @@ return new class extends Migration
             $table->unsignedTinyInteger('weekday'); // 0=CN, 1=Th2,...6=Th7
             $table->time('departure_time');
             $table->boolean('active')->default(true);
+
+            $table->unique(['bus_id','weekday','departure_time'], 'unique_schedule_template_trip');
+            $table->index(['weekday', 'departure_time']);
+            $table->index(['bus_id', 'weekday']);
             $table->timestamps();
         });
     }

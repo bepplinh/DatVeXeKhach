@@ -13,6 +13,12 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         // $schedule->command('inspire')->hourly();
+        
+        // Dọn dẹp draft checkouts hết hạn mỗi 15 phút
+        $schedule->command('draft:cleanup')->everyFifteenMinutes();
+        
+        // Gửi birthday coupons hàng ngày lúc 9:00
+        $schedule->command('coupons:send-birthday')->dailyAt('09:00');
     }
 
     /**

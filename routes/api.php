@@ -8,10 +8,9 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\RouteController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\OfficeController;
-use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BusTypeController;
 use App\Http\Controllers\LocationController;
-use App\Http\Controllers\SelectingController;
+use App\Http\Controllers\SeatFlowController;
 use App\Http\Controllers\CouponUserController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\TripStationController;
@@ -19,7 +18,7 @@ use App\Http\Controllers\Auth\OtpAuthController;
 use App\Http\Controllers\SeatLayoutTemplateController;
 use App\Http\Controllers\ScheduleTemplateTripController;
 use App\Http\Controllers\TripGenerateFromTemplateController;
-use App\Http\Controllers\SeatSelectionController;
+use App\Http\Controllers\DraftCheckoutController;
 
 
 Route::post('/register', [AuthController::class, 'register']); 
@@ -39,6 +38,18 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/me',       [AuthController::class, 'me']);
     Route::post('/logout',  [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
+
+
+    Route::prefix('trips/{tripId}')->group(function () {
+        Route::post('seats/select',   [SeatFlowController::class, 'select']);
+        Route::post('seats/unselect', [SeatFlowController::class, 'unselect']);
+    
+        Route::post('seats/checkout', [SeatFlowController::class, 'checkout']);
+        Route::post('seats/release',  [SeatFlowController::class, 'release']);
+    
+        // Có thể làm webhook public từ PSP (không bắt buộc auth:api nếu cần)
+        Route::post('seats/payment/success', [SeatFlowController::class, 'paymentSuccess']);
+    });
 });
 
 Route::apiResource('/users', UserController::class);
@@ -85,30 +96,29 @@ Route::get('coupon-users/coupon/{couponId}', [CouponUserController::class, 'getB
 Route::apiResource('schedule-template-trips', ScheduleTemplateTripController::class);
 Route::post('trips/generate-from-templates', [TripGenerateFromTemplateController::class, 'generate']);
 
-Route::prefix('trips/{tripId}')->group(function () {
-    // “đang chọn” chỉ mang tính hiển thị
-    Route::post('/selecting', [SelectingController::class, 'select']);
-    Route::delete('/selecting/{seatId}', [SelectingController::class, 'unselect']);
-
-    // Đặt ghế - ai book trước thắng
-    Route::post('/bookings', [BookingController::class, 'store']);
+// Draft Checkout routes
+Route::prefix('draft-checkouts')->group(function () {
+    // Public routes (có thể cho guest users)
+    Route::post('/', [DraftCheckoutController::class, 'store']);
+    Route::get('/{checkoutToken}', [DraftCheckoutController::class, 'show']);
+    Route::put('/{checkoutToken}', [DraftCheckoutController::class, 'update']);
+    Route::post('/{checkoutToken}/extend', [DraftCheckoutController::class, 'extend']);
+    Route::post('/{checkoutToken}/complete', [DraftCheckoutController::class, 'complete']);
+    Route::delete('/{checkoutToken}', [DraftCheckoutController::class, 'cancel']);
     
-    // Seat Selection API - chọn ghế trước khi đặt
-    Route::prefix('seats')->group(function () {
-        Route::post('/select', [SeatSelectionController::class, 'selectSeats']);
-        Route::post('/unselect', [SeatSelectionController::class, 'unselectSeats']);
-        Route::delete('/unselect-all', [SeatSelectionController::class, 'unselectAllSeats']);
-        Route::get('/selections', [SeatSelectionController::class, 'getUserSelections']);
-        Route::post('/check-status', [SeatSelectionController::class, 'checkSeatsStatus']);
+    // Protected routes (cần đăng nhập)
+    Route::middleware('auth:api')->group(function () {
+        Route::get('/', [DraftCheckoutController::class, 'index']); // Danh sách draft của user
     });
     
-    // Booking API - đặt ghế sau khi đã chọn
-    Route::prefix('bookings')->group(function () {
-        Route::post('/', [BookingController::class, 'store']);
-        Route::get('/selections', [BookingController::class, 'getUserSelections']);
-        Route::delete('/selections', [BookingController::class, 'cancelSelections']);
+    // Admin routes (cần quyền admin)
+    Route::middleware(['auth:api', 'role:admin'])->group(function () {
+        Route::get('/stats', [DraftCheckoutController::class, 'stats']);
+        Route::post('/cleanup', [DraftCheckoutController::class, 'cleanup']);
     });
 });
+
+
 
 
 

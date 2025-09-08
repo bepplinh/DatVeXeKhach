@@ -17,7 +17,7 @@ class ScheduleTemplateTripController extends Controller
             ->when($request->filled('weekday'), fn($qr) => $qr->where('weekday'))
             ->when($request->filled('active'),  fn($qr) => $qr->where('active', filter_var($request->active, FILTER_VALIDATE_BOOL)))
             ->orderBy('weekday')->orderBy('departure_time');
-            
+
         if ($q->count() === 0) {
             return response()->json([
                 'success' => false,
@@ -35,12 +35,58 @@ class ScheduleTemplateTripController extends Controller
 
     public function store(Store_Schedule_Template_Trip_Request $request)
     {
-        $tpl = $this->service->create($request->validated());
+        try {
+            $validated = $request->validated();
 
-        return response()->json([
-            'success' => true,
-            'data' => $tpl
-        ], 201);
+            $template = ScheduleTemplateTrip::create($validated);
+
+            return response()->json([
+                'success' => true,
+                'data' => $template,
+                'message' => 'Tạo lịch trình mẫu thành công'
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Xử lý lỗi unique constraint từ database
+            if (str_contains($e->getMessage(), 'unique_schedule_template_trip')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Xe này đã có lịch trình vào thời gian này. Vui lòng chọn giờ khác hoặc xe khác.'
+                ], 409); // Conflict
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra khi tạo lịch trình'
+            ], 500);
+        }
+    }
+
+    public function update(Update_Schedule_Template_Trip_Request $request, ScheduleTemplateTrip $scheduleTemplateTrip)
+    {
+        try {
+            $validated = $request->validated();
+
+            $scheduleTemplateTrip->update($validated);
+
+            return response()->json([
+                'success' => true,
+                'data' => $scheduleTemplateTrip,
+                'message' => 'Cập nhật lịch trình mẫu thành công'
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Xử lý lỗi unique constraint từ database
+            if (str_contains($e->getMessage(), 'unique_schedule_template_trip')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Xe này đã có lịch trình vào thời gian này. Vui lòng chọn giờ khác hoặc xe khác.'
+                ], 409); // Conflict
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra khi cập nhật lịch trình'
+            ], 500);
+        }
     }
 
     public function show(ScheduleTemplateTrip $scheduleTemplateTrip)
@@ -51,16 +97,6 @@ class ScheduleTemplateTripController extends Controller
         ]);
     }
 
-    public function update(Update_Schedule_Template_Trip_Request $request, ScheduleTemplateTrip $scheduleTemplateTrip)
-    {
-        $tpl = $this->service->update($scheduleTemplateTrip, $request->validated());
-
-        return response()->json([
-            'success' => true,
-            'data'    => $tpl,
-            'message' => 'Cập nhật template_trip thành công.',
-        ]);
-    }
 
     public function destroy(ScheduleTemplateTrip $scheduleTemplateTrip)
     {
