@@ -21,7 +21,7 @@ class SeatUnselecting implements ShouldBroadcastNow
     public function __construct(
         public int $tripId,
         public array $seatIds,
-        public int $byUserId
+        public ?int $userId = null
     ) {}
 
     /**
@@ -58,7 +58,7 @@ class SeatUnselecting implements ShouldBroadcastNow
         return [
             'trip_id' => $this->tripId,
             'seat_ids' => $this->seatIds,
-            'by_user_id' => $this->byUserId,
+            'user_id' => $this->userId,
             'timestamp' => now()->toISOString(),
         ];
     }

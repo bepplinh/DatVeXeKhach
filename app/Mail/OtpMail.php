@@ -2,8 +2,6 @@
 
 namespace App\Mail;
 
-use App\Models\Coupon;
-use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -11,20 +9,22 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class BirthdayCouponMail extends Mailable
+class OtpMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $user;
-    public $coupon;
+    public $code;
+    public $phone;
+    public $type;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(User $user, Coupon $coupon)
+    public function __construct(string $code, ?string $phone = null, string $type = 'email')
     {
-        $this->user = $user;
-        $this->coupon = $coupon;
+        $this->code = $code;
+        $this->phone = $phone;
+        $this->type = $type;
     }
 
     /**
@@ -32,8 +32,12 @@ class BirthdayCouponMail extends Mailable
      */
     public function envelope(): Envelope
     {
+        $subject = $this->type === 'phone' 
+            ? '📱 Mã xác thực SMS - DatVe'
+            : '🔐 Mã xác thực OTP - DatVe';
+
         return new Envelope(
-            subject: '🎉 Chúc mừng sinh nhật! Bạn có một mã giảm giá đặc biệt!',
+            subject: $subject,
         );
     }
 
@@ -42,12 +46,16 @@ class BirthdayCouponMail extends Mailable
      */
     public function content(): Content
     {
+        $template = $this->type === 'phone' 
+            ? 'emails.phone_otp'
+            : 'emails.email_otp';
+
         return new Content(
-            view: 'emails.birthday-coupon',
+            view: $template,
             with: [
-                'user' => $this->user,
-                'coupon' => $this->coupon,
-            ],
+                'code' => $this->code,
+                'phone' => $this->phone,
+            ]
         );
     }
 

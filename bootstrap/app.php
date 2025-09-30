@@ -17,7 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'role' => RoleMiddleware::class,
-            'auth' => Authenticate::class
+            'auth' => Authenticate::class,
+            'x-session-token' => \App\Http\Middleware\EnsureSessionToken::class
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

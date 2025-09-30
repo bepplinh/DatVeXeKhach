@@ -13,5 +13,4 @@ class Seat extends Model
     public function bus(): BelongsTo { return $this->belongsTo(Bus::class); }
     public function tripStatuses(): HasMany { return $this->hasMany(TripSeatStatus::class); }
     public function bookingItems(): HasMany { return $this->hasMany(BookingItem::class); }
-    public function seatEvents(): HasMany { return $this->hasMany(SeatEvent::class); }
 }

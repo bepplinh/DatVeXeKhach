@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mã xác thực OTP - DatVe</title>
+    <title>Mã xác thực SMS - DatVe</title>
     <style>
         * {
             margin: 0;
@@ -28,7 +28,7 @@
         }
         
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
             color: white;
             padding: 40px 30px;
             text-align: center;
@@ -56,17 +56,17 @@
         }
         
         .otp-section {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            background: linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%);
             border-radius: 12px;
             padding: 30px;
             text-align: center;
             margin: 30px 0;
-            border: 2px solid #e9ecef;
+            border: 2px solid #c3e6cb;
         }
         
         .otp-label {
             font-size: 16px;
-            color: #6c757d;
+            color: #155724;
             margin-bottom: 15px;
             font-weight: 500;
         }
@@ -74,12 +74,12 @@
         .otp-code {
             font-size: 36px;
             font-weight: 700;
-            color: #2c3e50;
+            color: #155724;
             letter-spacing: 8px;
             background: white;
             padding: 20px 30px;
             border-radius: 8px;
-            border: 2px dashed #667eea;
+            border: 2px dashed #28a745;
             display: inline-block;
             margin: 10px 0;
             font-family: 'Courier New', monospace;
@@ -87,26 +87,26 @@
         
         .otp-info {
             font-size: 14px;
-            color: #6c757d;
+            color: #155724;
             margin-top: 15px;
         }
         
-        .warning {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
+        .phone-info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
             border-radius: 8px;
             padding: 20px;
             margin: 30px 0;
         }
         
-        .warning-icon {
-            color: #f39c12;
+        .phone-info-icon {
+            color: #0c5460;
             font-size: 20px;
             margin-right: 10px;
         }
         
-        .warning-text {
-            color: #856404;
+        .phone-info-text {
+            color: #0c5460;
             font-size: 14px;
             line-height: 1.5;
         }
@@ -125,26 +125,26 @@
         }
         
         .footer .brand {
-            color: #667eea;
+            color: #28a745;
             font-weight: 600;
             font-size: 16px;
         }
         
         .security-tips {
-            background-color: #e8f4fd;
-            border-left: 4px solid #3498db;
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
             padding: 20px;
             margin: 20px 0;
         }
         
         .security-tips h3 {
-            color: #2c3e50;
+            color: #856404;
             font-size: 16px;
             margin-bottom: 10px;
         }
         
         .security-tips ul {
-            color: #6c757d;
+            color: #856404;
             font-size: 14px;
             padding-left: 20px;
         }
@@ -175,7 +175,7 @@
     <div class="email-container">
         <!-- Header -->
         <div class="header">
-            <h1>🔐 Xác thực OTP</h1>
+            <h1>📱 Xác thực SMS</h1>
             <p>Mã xác thực bảo mật từ DatVe</p>
         </div>
         
@@ -186,46 +186,47 @@
             </div>
             
             <p style="color: #6c757d; font-size: 16px; margin-bottom: 30px;">
-                Bạn đang thực hiện đăng ký/đăng nhập tài khoản DatVe. Vui lòng sử dụng mã OTP bên dưới để hoàn tất quá trình xác thực.
+                Bạn đang thực hiện đăng ký tài khoản DatVe bằng số điện thoại <strong>{{ $phone }}</strong>. 
+                Vui lòng sử dụng mã OTP bên dưới để hoàn tất quá trình xác thực và tạo mật khẩu.
             </p>
             
             <!-- OTP Section -->
             <div class="otp-section">
-                <div class="otp-label">Mã xác thực của bạn</div>
+                <div class="otp-label">Mã xác thực SMS của bạn</div>
                 <div class="otp-code">{{ $code }}</div>
                 <div class="otp-info">
                     ⏰ Mã có hiệu lực trong <strong>10 phút</strong>
                 </div>
             </div>
             
-            <!-- Warning -->
-            <div class="warning">
-                <span class="warning-icon">⚠️</span>
-                <span class="warning-text">
-                    <strong>Lưu ý quan trọng:</strong> Không chia sẻ mã này với bất kỳ ai. DatVe sẽ không bao giờ yêu cầu bạn cung cấp mã OTP qua điện thoại hoặc email.
+            <!-- Phone Info -->
+            <div class="phone-info">
+                <span class="phone-info-icon">📞</span>
+                <span class="phone-info-text">
+                    <strong>Thông tin:</strong> Sau khi xác thực thành công, bạn sẽ được yêu cầu tạo mật khẩu để đăng nhập lần sau bằng số điện thoại và mật khẩu.
                 </span>
             </div>
             
             <!-- Security Tips -->
             <div class="security-tips">
-                <h3>🛡️ Mẹo bảo mật</h3>
+                <h3>🛡️ Lưu ý bảo mật</h3>
                 <ul>
-                    <li>Luôn kiểm tra địa chỉ email người gửi</li>
-                    <li>Không click vào link trong email đáng ngờ</li>
-                    <li>Thay đổi mật khẩu thường xuyên</li>
-                    <li>Báo cáo ngay nếu nhận được email lạ</li>
+                    <li>Không chia sẻ mã OTP với bất kỳ ai</li>
+                    <li>Tạo mật khẩu mạnh (ít nhất 6 ký tự)</li>
+                    <li>Không sử dụng mật khẩu dễ đoán</li>
+                    <li>Báo cáo ngay nếu nhận được SMS lạ</li>
                 </ul>
             </div>
             
             <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
-                Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này hoặc liên hệ hỗ trợ.
+                Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua SMS này hoặc liên hệ hỗ trợ.
             </p>
         </div>
         
         <!-- Footer -->
         <div class="footer">
             <p class="brand">🚌 DatVe - Hệ thống đặt vé xe</p>
-            <p>Email này được gửi tự động, vui lòng không trả lời.</p>
+            <p>SMS này được gửi tự động, vui lòng không trả lời.</p>
             <p style="font-size: 12px; color: #adb5bd;">
                 © {{ date('Y') }} DatVe. Tất cả quyền được bảo lưu.
             </p>

@@ -24,7 +24,7 @@ class TripStation extends Model
 
 	public function route()
 	{
-		return $this->belongsTo(Route::class);
+		return $this->belongsTo(Route::class, 'route_id');
 	}
 
 	public function fromLocation()

@@ -22,6 +22,8 @@ return new class extends Migration
             $table->foreign('route_id')->references('id')->on('routes')->cascadeOnDelete();
             $table->foreign('bus_id')->references('id')->on('buses')->nullOnDelete();
             $table->unique(['route_id', 'bus_id', 'departure_time'], 'trips_unique');
+
+            
         });
         
     }

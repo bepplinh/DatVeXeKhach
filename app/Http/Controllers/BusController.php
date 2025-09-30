@@ -23,20 +23,33 @@ class BusController extends Controller
         $search      = $request->query('search');            // tìm kiếm theo code / name / plate_number
         $typeBusId   = $request->query('type_bus_id');       // lọc theo loại xe
 
-        $buses = Bus::with('typeBus')
+        $buses = Bus::query()
+            ->select(['id','code','name','plate_number','type_bus_id']) 
+            ->with(['typeBus' => function ($q) {
+                $q->select(['id','name','seat_count']); 
+            }])
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('code', 'like', "%$search%")
-                        ->orWhere('name', 'like', "%$search%")
-                        ->orWhere('plate_number', 'like', "%$search%");
+                    $q->where('code', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('plate_number', 'like', "%{$search}%");
                 });
             })
-            ->when($typeBusId, function ($query) use ($typeBusId) {
-                $query->where('type_bus_id', $typeBusId);
-            })
+            ->when($typeBusId, fn ($query) => $query->where('type_bus_id', $typeBusId))
             ->paginate($perPage);
-
-        return response()->json($buses);
+        
+        if ($buses->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bus no found',
+            ]);
+        } else {
+            return response()->json([
+                'success' => true,
+                'message' => 'Lấy danh sách xe thành công',
+                'data' => $buses,
+            ]);
+        }
     }
 
     public function store(StoreBusRequest $request)

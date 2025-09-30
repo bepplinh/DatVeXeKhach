@@ -1,13 +1,11 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Mail;
 use App\Jobs\SendBirthdayCouponJob;
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
 
 // Command để gửi coupon sinh nhật
 Artisan::command('coupons:send-birthday', function () {
@@ -107,3 +105,5 @@ Artisan::command('coupons:check-birthdays', function () {
     
     return 0;
 })->purpose('Kiểm tra user có sinh nhật hôm nay và coupon sinh nhật');
+
+Schedule::command('test:cron')->everyMinute();

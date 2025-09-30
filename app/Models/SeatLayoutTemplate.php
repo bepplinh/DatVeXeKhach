@@ -13,6 +13,11 @@ class SeatLayoutTemplate extends Model
         'total_seats'
     ];
 
+    public function bus()
+    {
+        return $this->hasMany(Bus::class, 'seat_layout_template_id');
+    }
+
     public function templateSeats()
     {
         return $this->hasMany(TemplateSeat::class, 'seat_layout_template_id');

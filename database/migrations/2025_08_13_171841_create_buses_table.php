@@ -12,7 +12,7 @@ return new class extends Migration {
             $table->string('name');
             $table->string('plate_number')->unique();
             $table->foreignId('type_bus_id')->constrained('type_buses')->onDelete('cascade');
-            $table->foreignId('seat_layout_template_id')->nullable()->constrained()->cascadeOnDelete()->nullOnDelete();
+            $table->foreignId('seat_layout_template_id')->nullable()->constrained('seat_layout_templates')->cascadeOnDelete()->onDelete('cascade');
             $table->boolean('uses_custom_seats')->default(false);
             $table->timestamps();
         });

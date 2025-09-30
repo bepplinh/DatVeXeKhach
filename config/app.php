@@ -66,8 +66,8 @@ return [
     */
 
     'timezone' => env('APP_TIMEZONE', 'Asia/Ho_Chi_Minh'),
-'locale' => 'vi',
-'fallback_locale' => 'en',
+    'locale' => 'vi',
+    'fallback_locale' => 'en',
 
     /*
     |--------------------------------------------------------------------------

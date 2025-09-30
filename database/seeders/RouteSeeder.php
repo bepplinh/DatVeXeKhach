@@ -12,8 +12,11 @@ class RouteSeeder extends Seeder
         // Define some city pairs by name (must exist in LocationSeeder as type=city)
         $pairs = [
             ['from' => 'Hà Nội', 'to' => 'Thanh Hóa'],
+            ['from' => 'Hà Nội', 'to' => 'Ninh Bình'],
+            ['from' => 'Hà Nội', 'to' => 'Nam Định'],
             ['from' => 'Hà Nam', 'to' => 'Ninh Bình'],
             ['from' => 'Nam Định', 'to' => 'Thanh Hóa'],
+            ['from' => 'Thanh Hóa', 'to' => 'Ninh Bình'],
         ];
 
         foreach ($pairs as $p) {

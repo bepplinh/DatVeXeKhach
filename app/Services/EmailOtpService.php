@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\OtpMail;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 
@@ -19,10 +20,8 @@ class EmailOtpService
         $code = (string) random_int(100000, 999999);
         Cache::put($this->key($email), $code, $this->ttlSeconds);
 
-        // Gửi mail đơn giản (có thể đổi sang Mailable)
-        Mail::raw("Mã OTP của bạn: {$code}. Hiệu lực 10 phút.", function ($m) use ($email) {
-            $m->to(strtolower(trim($email)))->subject('Mã xác thực đăng ký/đăng nhập');
-        });
+        // Gửi mail với Mailable class
+        Mail::to(strtolower(trim($email)))->send(new OtpMail($code, null, 'email'));
     }
 
     public function check(string $email, string $code): bool

@@ -17,7 +17,7 @@ return new class extends Migration
             $t->unsignedTinyInteger('deck')->default(1);
             $t->enum('column_group', ['right','middle','left']);
             $t->unsignedTinyInteger('index_in_column');
-            $t->string('seat_label');              // A01/B07...
+            $t->string('seat_label');    
             $t->timestamps();
             
             $t->unique(

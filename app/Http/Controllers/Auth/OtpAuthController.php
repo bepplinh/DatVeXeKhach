@@ -61,7 +61,7 @@ class OtpAuthController extends Controller
             'success'=>true, 'via'=>'email', 'status'=>'pending', 'to'=>$email
         ]);
     }
-    // POST /api/auth/otp/verify { via, phone/email, code }
+    // POST /api/auth/otp/verify { via, phone/email, code, password? }
     public function verify(Request $request)
     {
         $data = $request->validate([
@@ -69,6 +69,7 @@ class OtpAuthController extends Controller
             'phone' => ['required_if:via,phone','regex:/^\+[1-9]\d{6,14}$/'],
             'email' => ['required_if:via,email','email:rfc'],
             'code'  => ['required','digits_between:4,8'],
+            'password' => ['required_if:via,phone','nullable','string','min:6'],
         ]);
 
         $approved = false;
@@ -92,11 +93,15 @@ class OtpAuthController extends Controller
         if (!$user) {
             $seed = $data['via'] === 'phone' ? $data['phone'] : $identifier['email'];
             $username = $this->uniqueUsernameFrom($seed);
-            $randomPassword = Str::random(16);
+            
+            // Sử dụng password từ request nếu là phone, random password cho email
+            $password = ($data['via'] === 'phone' && !empty($data['password'])) 
+                ? $data['password'] 
+                : Str::random(16);
 
             $user = User::create(array_merge($identifier, [
                 'username' => $username,
-                'password' => Hash::make($randomPassword),
+                'password' => Hash::make($password),
                 'role'     => 'customer',
             ]));
         }
@@ -113,6 +118,9 @@ class OtpAuthController extends Controller
 
         // Cấp JWT + gắn cookie 30 ngày
         $token = auth('api')->login($user);
+        if (!$token) {
+            return response()->json(['success'=>false,'message'=>'Không thể tạo token'], 500);
+        }
         $resp  = $this->respondWithToken($token);
         return $this->cookie->attach($resp, $token);
     }

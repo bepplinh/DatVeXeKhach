@@ -13,19 +13,15 @@ return new class extends Migration
     {
         Schema::create('coupons', function (Blueprint $table) {
             $table->id();
-            $table->string('code')->unique(); // Mã giảm giá
-            $table->string('name'); // Tên mã giảm giá
-            $table->text('description')->nullable(); // Mô tả
-            $table->enum('discount_type', ['fixed', 'percentage']); // Loại giảm giá: cố định hoặc phần trăm
-            $table->string('type')->nullable(); // Ví dụ: welcome, loyalty, birthday, flashsale,...
-            $table->decimal('discount_value', 10, 2); // Giá trị giảm giá
-            $table->decimal('minimum_order_amount', 10, 2)->default(0); // Số tiền đơn hàng tối thiểu
-            $table->integer('max_usage')->nullable(); // Số lần sử dụng tối đa
-            $table->integer('used_count')->default(0); // Số lần đã sử dụng
-            $table->timestamp('valid_from')->nullable(); // Thời gian bắt đầu hiệu lực
-            $table->timestamp('valid_until')->nullable(); // Thời gian kết thúc hiệu lực
-            $table->boolean('is_active')->default(true); // Trạng thái hoạt động
-            $table->timestamps();
+            $table->string('code')->unique();
+            $table->enum('discount_type', ['percentage','fixed_amount']);
+            $table->decimal('discount_value', 10, 2);
+            $table->unsignedSmallInteger('per_user_limit')->default(1); // giới hạn mặc định / user
+            $table->unsignedInteger('total_limit')->nullable();         // giới hạn tổng (optional)
+            $table->unsignedInteger('used_count')->default(0);          // tổng đã dùng (optional)
+            $table->enum('status', ['active','disabled','expired'])->default('active');
+            $table->timestamp('start_at')->nullable();
+            $table->timestamp('end_at')->nullable();
         });
     }
 

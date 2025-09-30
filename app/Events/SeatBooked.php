@@ -20,7 +20,7 @@ class SeatBooked implements ShouldBroadcastNow
      */
     public function __construct(
         public int $tripId,
-        public int $seatId,
+        public array $seatIds,
         public int $bookingId,
         public int $userId,
         public string $status = 'booked'
@@ -59,7 +59,7 @@ class SeatBooked implements ShouldBroadcastNow
     {
         return [
             'trip_id' => $this->tripId,
-            'seat_id' => $this->seatId,
+            'seat_ids' => $this->seatIds,
             'booking_id' => $this->bookingId,
             'user_id' => $this->userId,
             'status' => $this->status,

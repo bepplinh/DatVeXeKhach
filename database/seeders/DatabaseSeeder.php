@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 
 use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Database\Seeders\BusSeeder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -27,8 +26,6 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             FakeUserJwtSeeder::class,
-            DefaultCouponsSeeder::class,
-            BirthdayCouponSeeder::class,
             LocationSeeder::class,
             RouteSeeder::class,
             TripStationSeeder::class,
@@ -36,8 +33,7 @@ class DatabaseSeeder extends Seeder
             SeatLayoutTemplateSeeder::class,
             BusSeeder::class,
             SeatSeeder::class,
-            CouponUserSeeder::class,
-            ScheduleTemplateTripSeeder::class,
+            ScheduleTemplateTripSeeder::class
         ]);
     }
 }

@@ -51,5 +51,11 @@ return [
         'sid' => env('TWILIO_ACCOUNT_SID'),
         'token' => env('TWILIO_AUTH_TOKEN'),
         'verify_sid' => env('TWILIO_VERIFY_SID'),
+    ],
+    
+    'gemini' => [
+        'key' => env('GEMINI_APP_KEY'),
+        'endpoint' => env('GEMINI_ENDPOINT'),
+        'model' => env('GEMINI_MODEL')
     ]
 ];
