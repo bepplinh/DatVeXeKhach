@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\Trip;
-use Illuminate\Support\Facades\DB;
+namespace routes;
+
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BusController;
 use App\Http\Controllers\AuthController;
@@ -10,7 +10,6 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\RouteController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\OfficeController;
-use App\Services\GeminiAI\GeminiAiService;
 use App\Http\Controllers\BusTypeController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\SeatFlowController;
@@ -18,9 +17,9 @@ use App\Http\Controllers\CouponUserController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\TripStationController;
 use App\Http\Controllers\Auth\OtpAuthController;
+use App\Http\Controllers\Client\GeminiChatController;
 use App\Http\Controllers\Client\TripSearchController;
 use App\Http\Controllers\SeatLayoutTemplateController;
-use App\Http\Controllers\Client\AiTripSearchController;
 use App\Http\Controllers\ScheduleTemplateTripController;
 use App\Http\Controllers\Client\ClientLocationController;
 use App\Http\Controllers\TripGenerateFromTemplateController;
@@ -29,7 +28,7 @@ use App\Http\Controllers\TripGenerateFromTemplateController;
 Route::post('/login',    [AuthController::class, 'login']);
 Route::post('/customer/login', [AuthController::class, 'customerLogin']);
 Route::post('/auth/social/{provider}', [SocialAuthController::class, 'loginWithToken'])
-    ->whereIn('provider', ['google','facebook']);
+    ->whereIn('provider', ['google', 'facebook']);
 
 // OTP Authentication Routes
 Route::prefix('auth/otp')->group(function () {
@@ -48,10 +47,10 @@ Route::middleware(['auth:api', 'x-session-token'])->group(function () {
     Route::prefix('trips/{tripId}')->group(function () {
         Route::post('seats/select',   [SeatFlowController::class, 'select']);
         Route::post('seats/unselect', [SeatFlowController::class, 'unselect']);
-    
+
         Route::post('seats/checkout', [SeatFlowController::class, 'checkout']);
         Route::post('seats/release',  [SeatFlowController::class, 'release']);
-    
+
         // Có thể làm webhook public từ PSP (không bắt buộc auth:api nếu cần)
         Route::post('seats/payment/success', [SeatFlowController::class, 'paymentSuccess']);
     });
@@ -82,17 +81,10 @@ Route::get('coupon-users/coupon/{couponId}', [CouponUserController::class, 'getB
 Route::apiResource('schedule-template-trips', ScheduleTemplateTripController::class);
 Route::post('trips/generate-from-templates', [TripGenerateFromTemplateController::class, 'generate']);
 
-
-
 //---------Client API------------
 
 Route::get('/client/locations', [ClientLocationController::class, 'index']);
 Route::get('/client/locations/search', [ClientLocationController::class, 'search']);
 Route::post('/client/trips/search', [TripSearchController::class, 'search']);
-Route::post('/ai/search-trips', [AiTripSearchController::class, 'search']);
-Route::post('/ai/search-trips-by-route', [AiTripSearchController::class, 'searchByRouteText']);
 
-
-
-
-
+Route::post('/ai/chat', [GeminiChatController::class, 'chat']);
