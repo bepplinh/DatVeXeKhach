@@ -38,13 +38,13 @@ return [
     'google' => [
         'client_id'     => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect'      => env('GOOGLE_REDIRECT_URI'), 
+        'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
     'facebook' => [
         'client_id'     => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect'      => env('FACEBOOK_REDIRECT_URI'), 
+        'redirect'      => env('FACEBOOK_REDIRECT_URI'),
     ],
 
     'twilio' => [
@@ -52,10 +52,13 @@ return [
         'token' => env('TWILIO_AUTH_TOKEN'),
         'verify_sid' => env('TWILIO_VERIFY_SID'),
     ],
-    
+
     'gemini' => [
         'key' => env('GEMINI_APP_KEY'),
         'endpoint' => env('GEMINI_ENDPOINT'),
-        'model' => env('GEMINI_MODEL')
+        'model' => env('GEMINI_MODEL'),
+        'base'    => env('GEMINI_BASE', 'https://generativelanguage.googleapis.com'),
+        'version' => env('GEMINI_VERSION', 'v1beta'),
+        'timeout' => env('GEMINI_TIMEOUT', 20),
     ]
 ];
