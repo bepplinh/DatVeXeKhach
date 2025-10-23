@@ -15,19 +15,21 @@ return new class extends Migration
             $table->id();
             $table->string('code')->unique(); 
             $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('seat_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('coupon_id')->nullable()->constrained('coupons')->nullOnDelete();
             $table->decimal('total_price', 10, 0)->default(0);
             $table->decimal('discount_amount', 10, 0)->default(0);
             $table->enum('status', ['pending', 'paid', 'cancelled'])->default('pending');
+            $table->unsignedBigInteger('origin_location_id');  // điểm đón
+            $table->unsignedBigInteger('destination_location_id'); // điểm trả
+            $table->string('pickup_address')->nullable();
+            $table->string('dropoff_address')->nullable();
 
             $table->timestamps();
             $table->timestamp('paid_at')->nullable();
             $table->timestamp('cancelled_at')->nullable();
-
-            $table->unique(['trip_id', 'seat_id'], 'uniq_trip_seat');
-            $table->index(['trip_id', 'status']);
+            $table->foreign('origin_location_id')->references('id')->on('locations');
+            $table->foreign('destination_location_id')->references('id')->on('locations');
         });
     }
 

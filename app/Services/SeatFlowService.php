@@ -4,10 +4,10 @@ namespace App\Services;
 
 use App\Events\SeatBooked;
 use App\Events\SeatLocked;
-use Illuminate\Support\Str;
 use App\Events\SeatSelecting;
 
 use App\Models\DraftCheckout;
+use App\Models\TripSeatStatus;
 use Illuminate\Support\Carbon;
 use App\Events\SeatUnselecting;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +57,7 @@ class SeatFlowService
     }
 
     /** Eval Lua: chạy được cả PhpRedis & Predis */
-    private function evalLua(string $lua, array $keys, array $args): array
+    private function evalLua(string $lua, array $keys, array $args): mixed
     {
         $conn = Redis::connection();
         // PhpRedis:
@@ -103,11 +103,30 @@ class SeatFlowService
         string $token,
         int $ttlSeconds = self::DEFAULT_TTL,
         int $maxPerSession = 6,
-        int $userId = 0
+        int $userId = 0,
+        ?int $fromLocationId = null,
+        ?int $toLocationId = null
     ): array {
         $seatIds = $this->normalizeSeatIds($seatIds);
         if (!$seatIds) {
-            return ['locked'=>[], 'failed'=>[], 'lock_expires_at'=>null, 'all_or_nothing'=>true];
+            return ['locked' => [], 'failed' => [], 'lock_expires_at' => null, 'all_or_nothing' => true];
+        }
+
+        // Chặn ghế đã booked trong DB trước khi vào Redis
+        $booked = TripSeatStatus::where('trip_id', $tripId)
+            ->whereIn('seat_id', $seatIds)
+            ->where('is_booked', true)
+            ->pluck('seat_id')
+            ->all();
+
+        if (!empty($booked)) {
+            return [
+                'locked' => [],
+                'failed' => $seatIds,
+                'lock_expires_at' => null,
+                'all_or_nothing' => true,
+                'message' => 'Một hoặc nhiều ghế đã được đặt (booked).'
+            ];
         }
 
         $ttl   = max(30, (int)$ttlSeconds);
@@ -189,18 +208,26 @@ LUA;
 
         if ((int)$status === -1) {
             return [
-                'locked'=>[], 'failed'=>$seatIds, 'lock_expires_at'=>null, 'all_or_nothing'=>true,
-                'message'=>"Tối đa {$maxPerSession} ghế cho mỗi phiên."
+                'locked' => [],
+                'failed' => $seatIds,
+                'lock_expires_at' => null,
+                'all_or_nothing' => true,
+                'message' => "Tối đa {$maxPerSession} ghế cho mỗi phiên."
             ];
         }
 
         if ((int)$status !== 1) {
             $failed = [];
-            foreach ($failedIdx as $i) { $failed[] = $seatIds[$i - 1] ?? null; }
-            $failed = array_values(array_filter($failed, fn($x)=>$x!==null));
+            foreach ($failedIdx as $i) {
+                $failed[] = $seatIds[$i - 1] ?? null;
+            }
+            $failed = array_values(array_filter($failed, fn($x) => $x !== null));
             return [
-                'locked'=>[], 'failed'=>$failed ?: $seatIds, 'lock_expires_at'=>null, 'all_or_nothing'=>true,
-                'message'=>'Một hoặc nhiều ghế đang được người khác giữ.'
+                'locked' => [],
+                'failed' => $failed ?: $seatIds,
+                'lock_expires_at' => null,
+                'all_or_nothing' => true,
+                'message' => 'Một hoặc nhiều ghế đang được người khác giữ.'
             ];
         }
 
@@ -210,7 +237,9 @@ LUA;
             seatIds: $seatIds,
             sessionToken: $token,
             userId: $userId ?: null,
-            ttlSeconds: $ttlSeconds
+            ttlSeconds: $ttlSeconds,
+            fromLocationId: $fromLocationId,
+            toLocationId: $toLocationId
         );
 
         // Thành công: broadcast realtime
@@ -234,7 +263,7 @@ LUA;
     public function release(int $tripId, array $seatIds, string $token, int $userId): array
     {
         $seatIds = $this->normalizeSeatIds($seatIds);
-        if (!$seatIds) return ['released'=>[], 'failed'=>[]];
+        if (!$seatIds) return ['released' => [], 'failed' => []];
 
         $zKey    = $this->zKey($tripId);
         $tripSet = $this->tripSetKey($tripId);
@@ -288,7 +317,7 @@ LUA;
             broadcast(new SeatUnselecting($tripId, $released, $userId))->toOthers();
         }
 
-        return ['released'=>$released, 'failed'=>$failed];
+        return ['released' => $released, 'failed' => $failed];
     }
 
     /* ============================ Booked ============================== */
@@ -299,51 +328,79 @@ LUA;
      * - Ghi DB (transaction)
      * - Giải phóng toàn bộ khóa bằng Lua (atomic)
      */
-    public function markBooked(
-        int $tripId,
-        array $seatIds,
-        string $token,
-        int $userId,
-        ?string $idempotencyKey = null
-    ): array {
+    public function markSeatsAsBooked(int $tripId, array $seatIds, int $userId)
+    {
         $seatIds = $this->normalizeSeatIds($seatIds);
-        if (!$seatIds) return ['booked'=>[], 'failed'=>$seatIds];
-
-        // Idempotency (nếu dùng)
-        if ($idempotencyKey) {
-            $existing = DB::table('bookings')->where('idempotency_key', $idempotencyKey)->first();
-            if ($existing) {
-                $bookedSeatIds = DB::table('booking_items')
-                    ->where('booking_id', $existing->id)
-                    ->pluck('seat_id')->map(fn($v)=>(int)$v)->all();
-
-                return [
-                    'booked' => $bookedSeatIds,
-                    'failed' => array_values(array_diff($seatIds, $bookedSeatIds)),
-                    'booking_id' => $existing->id,
-                ];
-            }
+        if (empty($seatIds)) {
+            throw new \RuntimeException('No seats to book.');
         }
 
-        // Kiểm tra khoá Redis (đúng token + còn TTL)
+        $now = now();
+
+        return DB::transaction(function () use ($tripId, $seatIds, $userId, $now) {
+            // 1) Seed rows if missing to satisfy unique(trip_id, seat_id)
+            $seed = [];
+            foreach ($seatIds as $sid) {
+                $seed[] = [
+                    'trip_id' => $tripId,
+                    'seat_id' => $sid,
+                    'is_booked' => false,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+            DB::table('trip_seat_statuses')->insertOrIgnore($seed);
+
+            // 2) Update to booked only when currently not booked
+            $in     = implode(',', array_fill(0, count($seatIds), '?'));
+            $params = array_merge([$userId, $now, $now, $tripId], $seatIds);
+            $affected = DB::update("
+                UPDATE trip_seat_statuses
+                SET booked_by=?, booked_at=?, is_booked=1, updated_at=?
+                WHERE trip_id=? AND seat_id IN ($in) AND is_booked=0
+            ", $params);
+
+            if ($affected !== count($seatIds)) {
+                throw new \RuntimeException('Some seats are not available to book anymore.');
+            }
+
+            return $affected;
+        });
+    }
+
+    /**
+     * Confirm booked based on an existing DraftCheckout and created Booking.
+     * Used after payment success (e.g., webhook).
+     */
+    public function confirmBooked(DraftCheckout $draft, int $bookingId, ?int $userId = null): void
+    {
+        $tripId = (int) $draft->trip_id;
+        $token  = (string) $draft->session_token;
+        $userId = (int) ($userId ?? $draft->user_id ?? 0);
+        $seatIds = $draft->items()->pluck('seat_id')->map(fn($v) => (int)$v)->all();
+        $seatIds = $this->normalizeSeatIds($seatIds);
+        if (empty($seatIds)) return;
+
+        // Ensure all locks are still owned by this session (best effort)
         foreach ($seatIds as $sid) {
             $key = $this->seatKeyFmt($tripId, $sid);
-            if (Redis::get($key) !== $token || Redis::ttl($key) <= 0) {
-                return ['booked'=>[], 'failed'=>$seatIds];
+            if (Redis::get($key) !== $token) {
+                // Continue anyway; DB status will be the source of truth
+                // and locks will be cleaned below.
+                break;
             }
         }
 
         $now = Carbon::now();
 
-        $result = DB::transaction(function () use ($tripId, $seatIds, $userId, $idempotencyKey, $now) {
-
+        DB::transaction(function () use ($tripId, $seatIds, $now) {
             // Seed rows nếu thiếu
             $seed = [];
             foreach ($seatIds as $sid) {
                 $seed[] = [
                     'trip_id' => $tripId,
                     'seat_id' => $sid,
-                    'status'  => 'available',
+                    'is_booked' => false,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
@@ -352,47 +409,20 @@ LUA;
 
             // Đặt booked
             $in     = implode(',', array_fill(0, count($seatIds), '?'));
-            $params = array_merge([$now, $tripId], $seatIds);
+            $params = array_merge([$now, $now, $tripId], $seatIds);
 
             $affected = DB::update("
                 UPDATE trip_seat_statuses
-                SET status='booked', updated_at=?
-                WHERE trip_id=? AND seat_id IN ($in) AND status <> 'booked'
+                SET is_booked=1, booked_at=?, updated_at=?
+                WHERE trip_id=? AND seat_id IN ($in) AND is_booked=0
             ", $params);
 
             if ($affected !== count($seatIds)) {
                 throw new \RuntimeException('Some seats are not available to book anymore.');
             }
-
-            // Tạo booking
-            $bookingId = DB::table('bookings')->insertGetId([
-                'code'            => strtoupper(Str::random(10)),
-                'trip_id'         => $tripId,
-                'user_id'         => $userId,
-                'total_price'     => 0, // TODO: tính giá
-                'discount_amount' => 0,
-                'status'          => 'paid', // hoặc 'pending'
-                'idempotency_key' => $idempotencyKey,
-                'created_at'      => $now,
-                'updated_at'      => $now,
-            ]);
-
-            $items = [];
-            foreach ($seatIds as $sid) {
-                $items[] = [
-                    'booking_id'  => $bookingId,
-                    'seat_id'     => $sid,
-                    'price_final' => 0,
-                    'created_at'  => $now,
-                    'updated_at'  => $now,
-                ];
-            }
-            DB::table('booking_items')->insert($items);
-
-            return ['booking_id' => $bookingId];
         });
 
-        // Giải phóng khóa bằng Lua (atomic): DEL key + ZREM + SREM(tập trip & sess)
+        // Release locks
         $zKey    = $this->zKey($tripId);
         $tripSet = $this->tripSetKey($tripId);
         $sessSet = $this->sessionSetKey($tripId, $token);
@@ -401,8 +431,6 @@ LUA;
         foreach ($seatIds as $sid) {
             $keys[] = $this->seatKeyFmt($tripId, $sid);
         }
-
-        // ARGV: [ token, seatId1.. ]
         $argv = array_merge([$token], array_map('strval', $seatIds));
 
         $lua = <<<LUA
@@ -430,9 +458,8 @@ LUA;
 
         $this->evalLua($lua, $keys, $argv);
 
-        broadcast(new SeatBooked($tripId, $seatIds, $result['booking_id'], $userId))->toOthers();
-
-        return ['booked'=>$seatIds, 'failed'=>[], 'booking_id'=>$result['booking_id']];
+        // Broadcast event (tạm thời comment để test)
+        // broadcast(new SeatBooked($tripId, $seatIds, $bookingId, $userId))->toOthers();
     }
 
     /* ======================== Load trạng thái ghế ======================== */
@@ -504,4 +531,98 @@ LUA;
         broadcast(new \App\Events\SeatUnselecting($tripId, [$seatId], null))->toOthers();
     }
 
+    public function renewLocksForPayment(DraftCheckout $draft, int $extendSec)
+    {
+        $tripId = (int) $draft->trip_id;
+        $session = (string) $draft->session_token;
+        $seatIds = (array) $draft->items()->pluck('seat_id')->map(fn($v) => (int)$v)->all();
+
+        foreach ($seatIds as $sid) {
+            $key = "trip:$tripId:seat:$sid:lock";
+            $owner = Redis::get($key);
+            if ($owner === $session) {
+                Redis::expire($key, $extendSec);
+            }
+        }
+    }
+
+    public function assertSeatsLockedByToken(int $tripId, array $seatIds, string $token)
+    {
+        foreach ($seatIds as $seatId) {
+            // Redis key kiểu: trip:{tripId}:seat:{seatId}:lock
+            $key = "trip:{$tripId}:seat:{$seatId}:lock";
+            $value = Redis::get($key);
+
+            if (!$value) {
+                throw new \RuntimeException("Ghế {$seatId} đã hết hạn giữ.");
+            }
+
+            // Mỗi lock lưu dưới dạng JSON hoặc token
+            if ($value !== $token) {
+                throw new \RuntimeException("Ghế {$seatId} đã bị người khác giữ/đặt.");
+            }
+        }
+    }
+
+    public function releaseLocksAfterBooked(int $tripId, array $seatIds): array
+    {
+        // 1. Chuẩn hóa ID ghế và kiểm tra mảng rỗng
+        $seatIds = $this->normalizeSeatIds($seatIds);
+        if (!$seatIds) {
+            return [];
+        }
+
+        $zKey    = $this->zKey($tripId);      // Sorted Set Key (TTL)
+        $tripSet = $this->tripSetKey($tripId); // Set Key (Danh sách ghế đang khóa của chuyến đi)
+
+        // 2. Chuẩn bị KEYS cho LUA script: [ zKey, tripSet, seatKey1, seatKey2, ... ]
+        $keys = [$zKey, $tripSet];
+        foreach ($seatIds as $sid) {
+            $keys[] = $this->seatKeyFmt($tripId, $sid);
+        }
+
+        // 3. Chuẩn bị ARGV cho LUA script: [ seatId1, seatId2, ... ]
+        $argv = array_map('strval', $seatIds);
+
+        $lua = <<<LUA
+-- KEYS[1]=zKey (TTL Sorted Set)
+-- KEYS[2]=tripSet (Trip Set)
+-- KEYS[3..]=seatKeys (Khóa từng ghế)
+-- ARGV[1..]=seatIds
+
+local zkey    = KEYS[1]
+local tripSet = KEYS[2]
+
+local released = {}
+
+-- Lặp qua từng khóa ghế (bắt đầu từ KEYS[3])
+for i = 3, #KEYS do
+    local key    = KEYS[i]
+    -- Tính toán index của seatId tương ứng trong ARGV
+    local seatId = tonumber(ARGV[i - 2]) 
+
+    -- Xóa khóa seat key VÔ ĐIỀU KIỆN
+    local deleted = redis.call("DEL", key)
+    
+    -- Nếu key bị xóa thành công (deleted == 1)
+    if deleted == 1 then
+        -- Xóa khỏi Sorted Set (TTL)
+        redis.call("ZREM", zkey, seatId)
+        
+        -- Xóa khỏi Trip Set (danh sách ghế đang khóa)
+        redis.call("SREM", tripSet, seatId) 
+        
+        table.insert(released, seatId)
+    end
+end
+
+-- Trả về danh sách các ID ghế đã được gỡ khóa
+return {released}
+LUA;
+        // 4. Thực thi script Lua atomically
+        [$released] = $this->evalLua($lua, $keys, $argv);
+
+        // 5. Chuyển kết quả về int
+        return array_map('intval', $released ?? []);
+    }
 }

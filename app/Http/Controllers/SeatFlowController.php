@@ -96,10 +96,12 @@ class SeatFlowController extends Controller
                 Rule::exists('seats','id')->where(fn($q) => $q->where('bus_id', $trip->bus_id)),
             ],
             'ttl'        => ['nullable','integer','min:10','max:600'],
+            'from_location_id' => ['nullable','integer','exists:locations,id'],
+            'to_location_id'   => ['nullable','integer','exists:locations,id'],
         ]);
 
         $userId = (int) $request->user()->id;
-        $token  = $request->header('X-Session-Token') ?? (string)$userId; // fallback an toàn
+        $token  = $request->header('X-Session-Token') ?? (string)$userId; 
 
         $result = $this->svc->checkout(
             $tripId,
@@ -107,7 +109,9 @@ class SeatFlowController extends Controller
             $token,
             $data['ttl'] ?? 180,
             6,
-            $userId
+            $userId,
+            $data['from_location_id'] ?? null,
+            $data['to_location_id'] ?? null
         );
 
         // Map ID -> số ghế để hiển thị đẹp
@@ -135,7 +139,9 @@ class SeatFlowController extends Controller
             seatIds:      $result['locked'],
             sessionToken: $token,
             userId:       $userId ?: null,
-            ttlSeconds:   $ttl
+            ttlSeconds:   $ttl,
+            fromLocationId: $data['from_location_id'] ?? null,
+            toLocationId: $data['to_location_id'] ?? null
         );
 
         $lockedNumbers = collect($result['locked'])->map(fn($id) => $seatMap[$id] ?? (string)$id)->all();

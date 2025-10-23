@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DraftCheckout extends Model
 {
+    protected $table = 'draft_checkouts';
     protected $fillable = [
         'trip_id',
         'user_id',

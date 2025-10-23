@@ -24,7 +24,9 @@ class DraftCheckoutService
         array $seatIds,
         string $sessionToken,
         ?int $userId,
-        int $ttlSeconds
+        int $ttlSeconds,
+        ?int $fromLocationId = null,
+        ?int $toLocationId = null
     ): DraftCheckout {
         $seatIds = array_values(array_unique(array_map('intval', $seatIds)));
         if (empty($seatIds)) {
@@ -34,7 +36,7 @@ class DraftCheckoutService
         $now   = now();
         $until = (clone $now)->addSeconds(max(30, $ttlSeconds));
 
-        return DB::transaction(function () use ($tripId, $seatIds, $sessionToken, $userId, $now, $until) {
+        return DB::transaction(function () use ($tripId, $seatIds, $sessionToken, $userId, $now, $until, $fromLocationId, $toLocationId) {
             // 1) Tính giá & snapshot label (tuỳ hệ thống vé — thay bằng service thật nếu có)
             $seats   = Seat::whereIn('id', $seatIds)->get(['id','seat_number']);
             $pricing = $this->computeSeatSnapshots($tripId, $seats); // [seat_id => ['price'=>..,'label'=>..,'fare_id'=>..]]
@@ -53,9 +55,14 @@ class DraftCheckoutService
                 $draft->session_token = $sessionToken;
                 $draft->status        = 'pending';          // hoặc 'draft' tuỳ enum của bạn
                 $draft->user_id       = $userId;
+                $draft->pickup_location_id = $fromLocationId;
+                $draft->dropoff_location_id = $toLocationId;
                 // các field nhập sau (passenger_*, pickup_*) để null, sẽ PATCH sau
             } else {
                 $draft->user_id ??= $userId;
+                // Cập nhật location IDs nếu chưa có
+                $draft->pickup_location_id ??= $fromLocationId;
+                $draft->dropoff_location_id ??= $toLocationId;
             }
 
             // Đồng bộ tổng & hạn
@@ -120,6 +127,58 @@ class DraftCheckoutService
             }
             if (array_key_exists('discount_amount', $payload)) {
                 $draft->discount_amount = (int)$payload['discount_amount'];
+            }
+
+            $draft->save();
+            return $draft->fresh(['items']);
+        });
+    }
+
+    /**
+     * Cập nhật draft theo session token và draft ID
+     * Được sử dụng trong CheckoutController để cập nhật thông tin thanh toán
+     */
+    public function updateDraftBySession(int|string $draftId, string $sessionToken, array $payload): DraftCheckout
+    {
+        return DB::transaction(function () use ($draftId, $sessionToken, $payload) {
+            /** @var DraftCheckout $draft */
+            $draft = DraftCheckout::whereKey($draftId)
+                ->where('session_token', $sessionToken)
+                ->whereIn('status', ['pending','paying'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            // Các field có thể cập nhật từ payload
+            $assignables = [
+                'passenger_name','passenger_phone','passenger_email',
+                'pickup_location_id','dropoff_location_id',
+                'pickup_address','dropoff_address',
+                'pickup_snapshot','dropoff_snapshot',
+                'booker_name','booker_phone',
+                'coupon_id','notes',
+                'payment_provider','payment_intent_id',
+                'status','completed_at','booking_id'
+            ];
+
+            foreach ($assignables as $field) {
+                if (array_key_exists($field, $payload)) {
+                    $draft->{$field} = $payload[$field];
+                }
+            }
+
+            // Xử lý passenger_info đặc biệt
+            if (isset($payload['passenger_info']) && is_array($payload['passenger_info'])) {
+                $draft->passenger_info = array_merge($draft->passenger_info ?? [], $payload['passenger_info']);
+            }
+
+            // Xử lý discount_amount
+            if (array_key_exists('discount_amount', $payload)) {
+                $draft->discount_amount = (int)$payload['discount_amount'];
+            }
+
+            // Xử lý payment_expires_at nếu có
+            if (array_key_exists('payment_expires_at', $payload)) {
+                $draft->payment_expires_at = $payload['payment_expires_at'];
             }
 
             $draft->save();
