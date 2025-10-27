@@ -2,11 +2,12 @@
 
 namespace App\Services\SeatFlow;
 
-use App\Services\DraftCheckoutService\DraftCheckoutService;
+use App\Events\SeatLocked;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Validation\ValidationException;
+use App\Services\DraftCheckoutService\DraftCheckoutService;
 
-class SeatCheckoutService
+class SeatLockService
 {
     const DEFAULT_TTL = 180;
 
@@ -28,7 +29,7 @@ class SeatCheckoutService
         private DraftCheckoutService $drafts,
     ) {}
 
-    public function checkout(
+    public function lock(
         array $trips,
         string $sessionToken,
         int $ttl = self::DEFAULT_TTL,
@@ -46,29 +47,39 @@ class SeatCheckoutService
 
         $draft = $this->drafts->createFromLocks(
             seatsByTrip: $seatsByTrip,
-            legsByTrip:  $legsByTrip,
-            token:       $sessionToken,
-            userId:      $userId,
-            ttlSeconds:  $ttl
+            legsByTrip: $legsByTrip,
+            token: $sessionToken,
+            userId: $userId,
+            ttlSeconds: $ttl
         );
-       // --- (D) TTL còn lại cho từng ghế để FE hiển thị countdown ---
-       $ttlLeft = $this->ttlLeftForSeats($seatsByTrip);
+        // --- (D) TTL còn lại cho từng ghế để FE hiển thị countdown ---
+        $ttlLeft = $this->ttlLeftForSeats($seatsByTrip);
 
-       // gắn ttl_left vào items trả về
-       $items = array_map(function ($it) use ($ttlLeft) {
-           $k = $it['trip_id'] . ':' . $it['seat_id'];
-           $it['ttl_left'] = $ttlLeft[$k] ?? null;
-           return $it;
-       }, $draft['items']);
+        // gắn ttl_left vào items trả về
+        $items = array_map(function ($it) use ($ttlLeft) {
+            $k = $it['trip_id'] . ':' . $it['seat_id'];
+            $it['ttl_left'] = $ttlLeft[$k] ?? null;
+            return $it;
+        }, $draft['items']);
 
-       return [
-           'success'    => true,
-           'draft_id'   => $draft['draft_id'],
-           'status'     => $draft['status'],
-           'expires_at' => $draft['expires_at'],
-           'totals'     => $draft['totals'],
-           'items'      => $items,
-       ];
+        $locksPayload = [];
+        foreach ($seatsByTrip as $tripId => $seatIds) {
+            $locksPayload[] = [
+                'trip_id' => (int) $tripId,
+                'seat_ids' => array_values($seatIds),
+                'leg'      => $legsByTrip[$tripId] ?? null, // OUT/RETURN nếu có
+            ];
+        }
+        SeatLocked::dispatch($sessionToken, $locksPayload);
+
+        return [
+            'success'    => true,
+            'draft_id'   => $draft['draft_id'],
+            'status'     => $draft['status'],
+            'expires_at' => $draft['expires_at'],
+            'totals'     => $draft['totals'],
+            'items'      => $items,
+        ];
     }
 
     private function normalizeTripsWithLeg(array $trips): array

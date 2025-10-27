@@ -23,178 +23,234 @@ use App\Services\GeminiAI\LocationResolverService;
 class GeminiAiService
 {
     public function __construct(
-        private ?Client $http = null,
-        private string $apiKey = '',
-        private string $endpoint = '',
-        private string $model = ''
-    ) {
-        $this->apiKey  = $this->apiKey  ?: config('services.gemini.key');
-        $this->endpoint= $this->endpoint?: rtrim(config('services.gemini.endpoint'), '/');
-        $this->model   = $this->model   ?: config('services.gemini.model', 'gemini-1.5-flash');
-
-        $this->http ??= new Client([
-            'timeout' => 15,
-            'connect_timeout' => 5,
-        ]);
-    }
+        private GeminiClient $gemini,
+        private TripSearchService $tripSearch,
+        private LocationResolverService $resolver,
+    ) {}
 
     /**
-     * Gọi Gemini để trích JSON tham số tìm chuyến.
+     * Xử lý 1 lượt chat.
+     * @return array{message:string, trips?:array<int, array>}
      */
-    public function extractSearchParams(string $userQuery, string $tz = 'Asia/Bangkok'): array
+    public function chat(string $userMessage): array
     {
-        $url = "{$this->endpoint}/{$this->model}:generateContent?key={$this->apiKey}";
+        // ====== tools (function calling) ======
+        $tools = [[
+            'functionDeclarations' => [[
+                'name' => 'search_trips',
+                'description' => 'Tìm chuyến xe khách một chiều theo câu hỏi của người dùng',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        // Người dùng có thể đưa text:
+                        'from_text' => ['type' => 'string', 'description' => 'Điểm đi dạng chữ: "Hà Nội", "Kim Mã"'],
+                        'to_text'   => ['type' => 'string', 'description' => 'Điểm đến dạng chữ: "Thọ Xuân", "Thanh Hóa"'],
+                        // Hoặc đưa sẵn location_id:
+                        'from_location_id' => ['type' => 'integer'],
+                        'to_location_id'   => ['type' => 'integer'],
+                        // Thời gian tự nhiên:
+                        'date_text'   => ['type' => 'string', 'description' => '"hôm nay", "mai", "thứ 6", hoặc "YYYY-MM-DD"'],
+                        'time_window' => ['type' => 'string', 'description' => '"sáng"|"chiều"|"tối" hoặc "HH:mm-HH:mm"'],
+                        // Tuỳ chọn lọc:
+                        'passengers'   => ['type' => 'integer', 'minimum' => 1, 'default' => 1],
+                        'bus_type_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                        'price_cap'    => ['type' => 'integer'],
+                        'min_seats'    => ['type' => 'integer'],
+                        'sort'         => ['type' => 'string', 'enum' => ['asc', 'desc'], 'default' => 'asc'],
+                        'limit'        => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100],
+                    ],
+                    // Tối thiểu: có ý niệm về ngày (date_text). from/to có thể là text để backend resolve.
+                    'required' => ['date_text']
+                ]
+            ]]
+        ]];
 
-        // Prompt hướng dẫn + schema
-        $schema = <<<JSON
-                {
-                "type":"object",
-                "properties":{
-                    "origin":{"type":"string"},
-                    "destination":{"type":"string"},
-                    "date":{"type":"string","description":"YYYY-MM-DD or relative vi-VN (vd: 'tối mai')"},
-                    "time_window":{"type":"string","description":"HH:mm-HH:mm hoặc 'sáng|chiều|tối'"},
-                    "seats":{"type":"integer","minimum":1},
-                    "pickup_hint":{"type":"string"},
-                    "dropoff_hint":{"type":"string"},
-                    "price_cap":{"type":"integer"},
-                    "flexible_days":{"type":"integer","minimum":0,"maximum":3},
-                    "preferences":{
-                    "type":"object",
-                    "properties":{
-                        "bus_type":{"type":"string","enum":["giuong_nam","limousine","ghe_ngoi"]},
-                        "avoid_night":{"type":"boolean"},
-                        "nearby_stops_km":{"type":"integer"}
-                    }
-                    }
-                },
-                "required":["origin","destination","date","seats"]
-                }
-                JSON;
+        // ====== system instruction (ngắn mà “ép kỷ luật”) ======
+        $system = [
+            'role' => 'user',
+            'parts' => [[
+                'text' => <<<PROMPT
+<<<SYS
 
-        $sys = <<<SYS
-Bạn là bộ trích tham số tìm chuyến xe khách. 
-- Output CHỈ là JSON theo schema.
-- Chuẩn hóa 'sáng=04:30-11:59', 'chiều=12:00-17:59', 'tối=18:00-23:59'.
-- Hiểu mốc thời gian tiếng Việt ('hôm nay','mai','thứ bảy tuần này','tối mai') theo timezone {$tz}.
-- Nếu mơ hồ, đặt flexible_days>=1 và cố gắng suy luận hợp lý.
-- Không viết thêm chữ ngoài JSON.
+Bạn là trợ lý **chỉ** hỗ trợ tìm **chuyến xe khách (bus)** trên hệ thống nội bộ.
+- Trả lời **tiếng Việt**, ngắn gọn.
+- Nếu đủ dữ kiện: gọi function `search_trips` để tìm chuyến.
+- Nếu thiếu **from/to/date**: hỏi đúng trường bị thiếu, KHÔNG hỏi flights/trains/hotel.
+- Thời gian: hiểu nhãn tiếng Việt như "hôm nay/mai/thứ x", "sáng/chiều/tối" hoặc "HH:mm-HH:mm".
+- Nếu không có kết quả: nói rõ **không tìm thấy**, gợi ý nới **giờ/giá/số ghế**, giữ nguyên ngôn ngữ Việt.
+=======
+Bạn là trợ lý tiếng việt *chỉ* hỗ trợ tìm *chuyến xe khách (bus)* trên hệ thống nội bộ.
+- Trả lời *tiếng Việt*, ngắn gọn và tuyệt đối không trả lời bằng tiếng anh.
+- Nếu đủ dữ kiện: gọi function search_trips để tìm chuyến.
+- Nếu không có chuyến nào, nói rõ “Không tìm thấy chuyến nào phù hợp.” bằng tiếng Việt.
+- Nếu thiếu *from/to/date*: hỏi đúng trường bị thiếu, KHÔNG hỏi flights/trains/hotel.
+- Thời gian: hiểu nhãn tiếng Việt như "hôm nay/mai/thứ x", "sáng/chiều/tối" hoặc "HH:mm-HH:mm".
+- Nếu không có kết quả: nói rõ *không tìm thấy*, gợi ý nới *giờ/giá/số ghế*, giữ nguyên ngôn ngữ Việt.
+>>>>>>> 0cb8e877b2f3af4d7f0e4097190fa585b8081be8
 SYS;
+PROMPT
+            ]]
+        ];
 
-        $payload = [
-            'contents' => [[
-                'role' => 'user',
-                'parts' => [[
-                    'text' => $sys . "\n\nSCHEMA:\n" . $schema . "\n\nCÂU HỎI:\n" . $userQuery
-                ]]
-            ]],
-            // ép trả MIME JSON để dễ parse
-            'generationConfig' => [
-                'response_mime_type' => 'application/json',
-                'temperature' => 0.1,
+        // ====== Turn 1: hỏi model xem có muốn gọi function không ======
+        $payload1 = [
+            'contents' => [
+                $system,
+                ['role' => 'user', 'parts' => [['text' => $userMessage]]],
             ],
             'tools' => $tools,
         ];
 
         try {
-            $res = $this->http->post($url, ['json' => $payload]);
-            $json = json_decode((string)$res->getBody(), true);
+            $first = $this->gemini->firstTurn($payload1);
+        } catch (\Throwable $e) {
+            return ['message' => 'Xin lỗi, hệ thống AI đang bận. Bạn thử lại sau nhé.'];
+        }
 
-            $text = Arr::get($json, 'candidates.0.content.parts.0.text', '{}');
-            $data = json_decode($text, true);
-            if (!is_array($data)) {
-                throw new \RuntimeException('Gemini returned non-JSON');
+        $call = GeminiClient::extractFunctionCall($first);
+
+        // ====== Model yêu cầu gọi function: tiến hành thực thi nghiệp vụ ======
+        if ($call && ($call['name'] ?? null) === 'search_trips') {
+            $args = $call['args'] ?? [];
+
+
+
+            $preFrom = $preTo = '';
+            if (preg_match('/^\s*(?:từ\s+)?(.+?)\s+(?:đi|đến|->)\s+(.+?)\s*$/iu', $userMessage, $m)) {
+                $preFrom = trim($m[1]);
+                $preTo   = trim($m[2]);
             }
-            // Validate minimal required fields; if missing, try heuristic fallback
-            $hasCore = isset($data['origin'], $data['destination']);
-            if (!$hasCore) {
-                $fallback = $this->fallbackExtract($userQuery);
-                if (!empty($fallback)) {
-                    return $fallback;
+
+
+            // 1) Resolve from/to
+            $fromId = (int) ($args['from_location_id'] ?? 0);
+            $toId   = (int) ($args['to_location_id'] ?? 0);
+
+            $fromText = trim((string) ($args['from_text'] ?? ''));
+            $toText   = trim((string) ($args['to_text'] ?? ''));
+
+            $fromText = trim((string) ($args['from_text'] ?? $args['from'] ?? $args['origin'] ?? $preFrom));
+            $toText   = trim((string) ($args['to_text']   ?? $args['to']   ?? $args['destination'] ?? $preTo));
+
+            if ($this->resolver) {
+                if ($fromId <= 0 && $fromText !== '') {
+                    $fromId = (int) ($this->resolver->resolveIdFromText($fromText) ?? 0);
+                }
+                if ($toId <= 0 && $toText !== '') {
+                    $toId = (int) ($this->resolver->resolveIdFromText($toText) ?? 0);
                 }
             }
-            return $data;
-        } catch (\Throwable $e) {
-            Log::warning('Gemini extract failed', ['err' => $e->getMessage()]);
-            // Heuristic fallback parser for common vi-VN patterns
-            $fallback = $this->fallbackExtract($userQuery);
-            return $fallback ?: [];
+
+            if ($fromId <= 0 || $toId <= 0) {
+                $missing = [];
+                if ($fromId <= 0) $missing[] = 'điểm đi';
+                if ($toId <= 0)   $missing[] = 'điểm đến';
+                $m = implode(' và ', $missing);
+                return ['message' => "Mình cần $m cụ thể (bạn chọn từ gợi ý giúp mình nhé?)."];
+            }
+
+            // ---- Lấy date/time từ nhiều key + fallback từ message gốc ----
+            $dateText = (string)($args['date_text']
+                ?? $args['date']
+                ?? $args['day']
+                ?? $args['when']
+                ?? $args['travel_date']
+                ?? ''
+            );
+
+            // Fallback: nếu model không map, thử bóc trực tiếp từ câu người dùng
+            if ($dateText === '' && !empty($userMessage)) {
+                $dateText = $userMessage; // ViDatetimeParser của bạn hiểu "hôm nay/mai/thứ x"
+            }
+
+            if (trim($dateText) === '') {
+                return ['message' => 'Bạn muốn đi ngày nào?'];
+            }
+
+
+            $dateYmd = \App\Support\Time\ViDatetimeParser::resolveDate($dateText, 'Asia/Bangkok')->format('Y-m-d');
+
+            $dateYmd = ViDatetimeParser::resolveDate($dateText, 'Asia/Bangkok')->format('Y-m-d');
+
+            // ---- Time window ----
+            $timeRaw = (string)($args['time_window'] ?? $args['time'] ?? $args['period'] ?? '');
+            $time = mb_strtolower(trim($timeRaw));
+            $map = [
+                'buổi sáng' => 'sáng',
+                'sang' => 'sáng',
+                'sáng sớm' => 'sáng',
+                'buổi chiều' => 'chiều',
+                'chieu' => 'chiều',
+                'chiều muộn' => 'chiều',
+                'buổi tối'  => 'tối',
+                'toi' => 'tối',
+                'tối muộn' => 'tối',
+            ];
+            if (isset($map[$time])) $time = $map[$time];
+
+            $timeFrom = $timeTo = null;
+            if ($time !== '') {
+                [$timeFrom, $timeTo] = \App\Support\Time\ViDatetimeParser::resolveTimeWindow($time);
+            }
+
+            // 3) Map filters sang searchOneWay
+            $filters = [];
+            if ($timeFrom && $timeTo) {
+                $filters['time_from'] = $timeFrom;
+                $filters['time_to']   = $timeTo;
+            }
+            if (!empty($args['bus_type_ids']) && is_array($args['bus_type_ids'])) {
+                $filters['bus_type'] = array_map('intval', $args['bus_type_ids']);
+            }
+            if (isset($args['price_cap']))  $filters['price_cap']  = (int)$args['price_cap'];
+            if (isset($args['min_seats']))  $filters['min_seats']  = max(0, (int)$args['min_seats']);
+            if (isset($args['limit']))      $filters['limit']      = (int)$args['limit'];
+            $sort = strtolower((string)($args['sort'] ?? 'asc'));
+            $filters['sort'] = in_array($sort, ['asc', 'desc'], true) ? $sort : 'asc';
+
+            // passengers => tối thiểu số ghế
+            if (isset($args['passengers'])) {
+                $filters['min_seats'] = max((int)($filters['min_seats'] ?? 0), (int)$args['passengers']);
+            }
+
+            // 4) Gọi service tìm chuyến của bạn
+            try {
+                $trips = $this->tripSearch->searchOneWay($fromId, $toId, $dateYmd, $filters);
+            } catch (\Throwable $e) {
+                return ['message' => 'Không thể tìm chuyến lúc này. Bạn thử lại sau nhé.'];
+            }
+
+            // 5) Turn 2: gửi functionResponse cho Gemini để “kể chuyện” đẹp
+            $payload2 = [
+                'contents' => [[
+                    'role' => 'model',
+                    'parts' => [[
+                        'functionResponse' => [
+                            'name' => 'search_trips',
+                            'response' => [
+                                'name' => 'search_trips',
+                                'content' => [
+                                    'trips' => $trips,
+                                ],
+                            ],
+                        ]
+                    ]]
+                ]]
+            ];
+
+            try {
+                $second = $this->gemini->secondTurn($payload2);
+                $text = GeminiClient::extractText($second) ?? 'Mình đã tìm được một số chuyến phù hợp.';
+            } catch (\Throwable $e) {
+                // Fallback: nếu turn 2 lỗi, vẫn trả trips để FE render
+                $text = 'Mình đã tìm được một số chuyến phù hợp.';
+            }
+
+            return ['message' => $text, 'trips' => $trips];
         }
-    }
 
-    /**
-     * Very simple Vietnamese heuristic extractor to handle common patterns like:
-     * "Ngày mai có chuyến xe nào từ Hà Nội đi Thanh Hóa không?"
-     */
-    private function fallbackExtract(string $userQuery): array
-    {
-        $q = trim(mb_strtolower($userQuery));
-
-        // Seats: e.g., "2 vé" or "2 người"
-        $seats = 1;
-        if (preg_match('/(\d{1,2})\s*(vé|nguoi|người)/u', $q, $m)) {
-            $seats = max(1, (int) $m[1]);
-        }
-
-        // Date: detect "ngày mai" or "mai"
-        $date = null;
-        if (preg_match('/ngày\s*mai|\bmai\b/u', $q)) {
-            $date = 'mai';
-        } elseif (preg_match('/hôm\s*nay/u', $q)) {
-            $date = 'hôm nay';
-        }
-
-        // Origin/Destination patterns
-        $origin = null;
-        $destination = null;
-
-        // Pattern 1: "từ X (đi|đến|tới|về) Y"
-        if (preg_match('/từ\s+(.+?)\s+(?:đi|đến|tới|về|ra)\s+(.+?)(\?|$|\.|,)/u', $userQuery, $m)) {
-            $origin = trim($m[1]);
-            $destination = trim($m[2]);
-        }
-
-        // Pattern 2: "X đi Y"
-        if (!$origin && !$destination && preg_match('/\b(.+?)\s+đi\s+(.+?)(\?|$|\.|,)/u', $userQuery, $m)) {
-            $origin = trim($m[1]);
-            $destination = trim($m[2]);
-        }
-
-        // Pattern 3: "X -> Y"
-        if ((!$origin || !$destination) && preg_match('/(.+?)->(.+?)(\?|$|\.|,)/u', $userQuery, $m)) {
-            $origin = $origin ?: trim($m[1]);
-            $destination = $destination ?: trim($m[2]);
-        }
-
-        // Price cap: "dưới 250k", "<= 300000"
-        $priceCap = null;
-        if (preg_match('/dưới\s*(\d{2,6})\s*(k|nghìn|ngàn)?/u', $q, $m)) {
-            $v = (int) $m[1];
-            $priceCap = isset($m[2]) && $m[2] ? $v * 1000 : $v;
-        } elseif (preg_match('/<=?\s*(\d{5,7})/u', $q, $m)) {
-            $priceCap = (int) $m[1];
-        }
-
-        // If we cannot find both origin and destination, give up
-        if (!$origin || !$destination) {
-            return [];
-        }
-
-        return [
-            'origin' => $origin,
-            'destination' => $destination,
-            'date' => $date ?? 'hôm nay',
-            'time_window' => null,
-            'seats' => $seats,
-            'pickup_hint' => null,
-            'dropoff_hint' => null,
-            'price_cap' => $priceCap,
-            'flexible_days' => 0,
-            'preferences' => [
-                'bus_type' => null,
-                'avoid_night' => false,
-                'nearby_stops_km' => null,
-            ],
-        ];
+        // ====== Không gọi function: thường là câu hỏi làm rõ ======
+        $text = GeminiClient::extractText($first) ?? 'Bạn vui lòng cho biết điểm đi, điểm đến và ngày đi.';
+        return ['message' => $text];
     }
 }

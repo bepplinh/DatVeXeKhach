@@ -2,49 +2,46 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 
-class SeatLocked
+class SeatLocked implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    /**
-     * Create a new event instance.
-     */
     public function __construct(
-        public int $tripId, 
-        public array $seatIds, 
-        public string $byToken, 
-        public int $ttl,
-        public int $userId 
+        public string $sessionToken,
+        public array $locks
     ) {}
 
-    /**
-     * Get the channels the event should broadcast on.
-     *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
-     */
     public function broadcastOn(): array
     {
-        return [
-            new PrivateChannel("trip.$this->tripId"),
-        ];
+        $channels = [];
+
+        foreach ($this->locks as $lock) {
+            $tripId = (int) $lock['trip_id'];
+            $channels[] = new PrivateChannel("trip.{$tripId}");
+        }
+
+        // Nếu bạn muốn kênh dành riêng cho client (tuỳ chọn)
+        $channels[] = new PrivateChannel("client.session.{$this->sessionToken}");
+
+        return $channels;
     }
 
-    public function broadcastWith()
+    public function broadcastAs(): string
+    {
+        return 'SeatLocked';
+    }
+
+    public function broadcastWith(): array
     {
         return [
-            'trip_id' => $this->tripId,
-            'seat_ids' => $this->seatIds,
-            'ttl'      => $this->ttl,
-            'user_id'  => $this->userId,
-            'ts'       => now()->toISOString(),
+            'session_token' => $this->sessionToken,
+            'locks'         => $this->locks,
         ];
     }
 }

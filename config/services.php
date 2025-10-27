@@ -56,6 +56,20 @@ return [
     'gemini' => [
         'key' => env('GEMINI_APP_KEY'),
         'endpoint' => env('GEMINI_ENDPOINT'),
-        'model' => env('GEMINI_MODEL')
+        'model' => env('GEMINI_MODEL'),
+        'base'    => env('GEMINI_BASE', 'https://generativelanguage.googleapis.com'),
+        'version' => env('GEMINI_VERSION', 'v1beta'),
+        'timeout' => env('GEMINI_TIMEOUT', 20),
+        'base' => env('GEMINI_BASE', 'https://generativeai.googleapis.com'),
+        'version' => env('GEMINI_VERSION', 'v1beta'),
+        'timeout' => env('GEMINI_TIMEOUT', 20)
+    ],
+
+    'payos' => [
+        'client_id'    => env('PAYOS_CLIENT_ID'),
+        'api_key'      => env('PAYOS_API_KEY'),
+        'checksum_key' => env('PAYOS_CHECKSUM_KEY'),
+        'return_url'   => env('PAYOS_RETURN_URL'),
+        'cancel_url'   => env('PAYOS_CANCEL_URL'),
     ]
 ];

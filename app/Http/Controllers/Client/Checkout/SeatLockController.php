@@ -5,25 +5,19 @@ namespace App\Http\Controllers\Client\Checkout;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
-use App\Services\SeatFlow\SeatCheckoutService;
+use App\Services\SeatFlow\SeatLockService;
+use App\Services\SeatFlow\SeatReleaseService;
 
 class SeatLockController extends Controller
 {
     public function __construct(
-        private SeatCheckoutService $seatCheckout
+        private SeatLockService $seatLock,
+        private SeatReleaseService $seatRelease
     ) {}
-    
+
     /**
      * POST /api/checkout/lock-seats
      * Body:
-     * {
-     *   "trips": [
-     *     {"trip_id": 1, "seat_ids": [3,4,5]},
-     *     {"trip_id": 2, "seat_ids": [1,2]}
-     *   ],
-     *   "token": "sess_abc123",
-     *   "ttl": 180
-     * }
      */
     public function lock(Request $request)
     {
@@ -36,11 +30,11 @@ class SeatLockController extends Controller
             'ttl'                     => 'nullable|integer|min:30|max:3600',
         ]);
 
-        $ttl = (int) (SeatCheckoutService::DEFAULT_TTL);
+        $ttl = (int) (SeatLockService::DEFAULT_TTL);
         $token = $request->header('X-Session-Token');
         $userId = Auth::id();
 
-        $result = $this->seatCheckout->checkout(
+        $result = $this->seatLock->lock(
             trips: $data['trips'],
             sessionToken: $token,
             userId: $userId,
@@ -48,5 +42,14 @@ class SeatLockController extends Controller
         );
 
         return response()->json($result);
+    }
+
+    public function unlock(Request $request)
+    {
+        $sessionToken = $request->header('X-Session-Token');
+
+        $res = $this->seatRelease->cancelAllBySession($sessionToken);
+
+        return response()->json($res);
     }
 }

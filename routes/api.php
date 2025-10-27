@@ -51,6 +51,7 @@ Route::middleware(['auth:api', 'x-session-token'])->group(function () {
 
     Route::put('drafts/{draftId}/payment', [CheckoutController::class, 'updateDraftPayment']);
     Route::post('checkout/lock-seats', [SeatLockController::class, 'lock']);
+    Route::post('checkout/unlock-seats', [SeatLockController::class, 'unlock']);
 
     Route::prefix('trips/{tripId}')->group(function () {
         Route::post('seats/select',   [SeatFlowController::class, 'select']);
@@ -96,7 +97,3 @@ Route::get('/client/locations/search', [ClientLocationController::class, 'search
 Route::post('/client/trips/search', [TripSearchController::class, 'search']);
 
 Route::post('/ai/chat', [GeminiChatController::class, 'chat']);
-
-
-
-
