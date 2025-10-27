@@ -22,9 +22,10 @@ use App\Http\Controllers\Client\TripSearchController;
 use App\Http\Controllers\SeatLayoutTemplateController;
 use App\Http\Controllers\ScheduleTemplateTripController;
 use App\Http\Controllers\Client\ClientLocationController;
-use App\Http\Controllers\Client\Payment\PayOSWebhookController;
 use App\Http\Controllers\Client\Checkout\CheckoutController;
+use App\Http\Controllers\Client\Checkout\SeatLockController;
 use App\Http\Controllers\TripGenerateFromTemplateController;
+use App\Http\Controllers\Client\Payment\PayOSWebhookController;
 
 
 Route::post('/login',    [AuthController::class, 'login']);
@@ -48,8 +49,8 @@ Route::middleware(['auth:api', 'x-session-token'])->group(function () {
     Route::post('/logout',  [AuthController::class, 'logout']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
 
-    Route::put('trips/{trip}/draft/{draft}/update', [CheckoutController::class, 'updateDraftInfoById']);
-   
+    Route::put('drafts/{draftId}/payment', [CheckoutController::class, 'updateDraftPayment']);
+    Route::post('checkout/lock-seats', [SeatLockController::class, 'lock']);
 
     Route::prefix('trips/{tripId}')->group(function () {
         Route::post('seats/select',   [SeatFlowController::class, 'select']);
@@ -96,8 +97,6 @@ Route::post('/client/trips/search', [TripSearchController::class, 'search']);
 
 Route::post('/ai/chat', [GeminiChatController::class, 'chat']);
 
-Route::get('test', function () {
-    return 'tôi là đức anh đây';
-});
+
 
 

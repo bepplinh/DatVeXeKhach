@@ -32,6 +32,11 @@ class DraftCheckout extends Model
         'completed_at',
     ];
 
+    public function legs()
+    {
+        return $this->hasMany(DraftCheckoutLeg::class, 'draft_checkout_id');
+    }
+
     public function items()
     {
         return $this->hasMany(DraftCheckoutItem::class, 'draft_checkout_id');

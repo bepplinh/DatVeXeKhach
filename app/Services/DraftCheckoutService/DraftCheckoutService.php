@@ -1,213 +1,253 @@
 <?php
 
+
 namespace App\Services\DraftCheckoutService;
 
 use App\Models\Seat;
 use App\Models\Trip;
 use App\Models\DraftCheckout;
-
-use Illuminate\Support\Carbon;
+use App\Models\DraftCheckoutLeg;
 use App\Models\DraftCheckoutItem;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Validation\ValidationException;
+
 
 class DraftCheckoutService
 {
-    /**
-     * Tạo/ghi draft từ danh sách ghế đã lock (all-or-nothing đã OK ở Redis)
-     * - Idempotent theo (trip_id, session_token) khi status còn "mở" (pending|paying)
-     * - Snapshot từng ghế (label/price/fare_id)
-     * - Đặt expires_at khớp TTL bên Redis
-     */
-    public function startFromLockedSeats(
-        int $tripId,
-        array $seatIds,
-        string $sessionToken,
+    public function createFromLocks(
+        array $seatsByTrip,
+        array $legsByTrip,
+        string $token,
         ?int $userId,
-        int $ttlSeconds,
-        ?int $fromLocationId = null,
-        ?int $toLocationId = null
-    ): DraftCheckout {
-        $seatIds = array_values(array_unique(array_map('intval', $seatIds)));
-        if (empty($seatIds)) {
-            throw new \RuntimeException('seat_ids trống.');
+        int $ttlSeconds
+    ): array {
+        if (empty($seatsByTrip)) {
+            throw ValidationException::withMessages(['trips' => ['Không có ghế hợp lệ.']]);
         }
 
-        $now   = now();
-        $until = (clone $now)->addSeconds(max(30, $ttlSeconds));
+        // 2) Load Trip + Seat
+        $tripInfo = $this->loadTripsAndSeats($seatsByTrip);
 
-        return DB::transaction(function () use ($tripId, $seatIds, $sessionToken, $userId, $now, $until, $fromLocationId, $toLocationId) {
-            // 1) Tính giá & snapshot label (tuỳ hệ thống vé — thay bằng service thật nếu có)
-            $seats   = Seat::whereIn('id', $seatIds)->get(['id','seat_number']);
-            $pricing = $this->computeSeatSnapshots($tripId, $seats); // [seat_id => ['price'=>..,'label'=>..,'fare_id'=>..]]
-            $total   = array_sum(array_map(fn($x) => (int) $x['price'], $pricing));
+        // 3) Tính giá theo logic của bạn (computeSeatSnapshots)
+        $snapshotsByTrip = []; // [tripId => [ [seat_id, seat_code, price], ... ]]
+        foreach ($tripInfo as $tripId => $info) {
+            $seats = $info['seats']->only($seatsByTrip[$tripId])->values();
+            $snapshotsByTrip[$tripId] = $this->computeSeatSnapshots((int)$tripId, $seats);
+        }
 
-            // 2) Tìm draft mở (pending|paying) theo session_token + trip
-            $draft = DraftCheckout::where('trip_id', $tripId)
-                ->where('session_token', $sessionToken)
-                ->whereIn('status', ['pending','paying'])   // đổi theo enum của bạn nếu khác
+        // 4) Transaction tạo/cập nhật draft + legs + items
+        $result = DB::transaction(function () use ($seatsByTrip, $legsByTrip, $snapshotsByTrip, $token, $userId, $ttlSeconds) {
+
+            // 4.1 Upsert draft theo session_token (idempotent)
+            /** @var DraftCheckout|null $draft */
+            $draft = DraftCheckout::query()
+                ->where('session_token', $token)
+                ->whereIn('status', ['pending', 'paying'])
+                ->where('expires_at', '>', now())
                 ->lockForUpdate()
                 ->first();
 
             if (!$draft) {
-                $draft = new DraftCheckout();
-                $draft->trip_id       = $tripId;
-                $draft->session_token = $sessionToken;
-                $draft->status        = 'pending';          // hoặc 'draft' tuỳ enum của bạn
-                $draft->user_id       = $userId;
-                $draft->pickup_location_id = $fromLocationId;
-                $draft->dropoff_location_id = $toLocationId;
-                // các field nhập sau (passenger_*, pickup_*) để null, sẽ PATCH sau
+                $draft = DraftCheckout::query()->create([
+                    'user_id'        => $userId,
+                    'session_token'  => $token,
+                    'status'         => 'pending',
+                    'currency'       => 'VND',
+                    'total_price'    => 0,
+                    'discount_amount' => 0,
+                    'expires_at'     => now()->addSeconds($ttlSeconds),
+                ]);
             } else {
-                $draft->user_id ??= $userId;
-                // Cập nhật location IDs nếu chưa có
-                $draft->pickup_location_id ??= $fromLocationId;
-                $draft->dropoff_location_id ??= $toLocationId;
+                // gia hạn thời gian theo TTL mới nhất
+                $draft->update([
+                    'expires_at' => now()->addSeconds($ttlSeconds),
+                ]);
             }
 
-            // Đồng bộ tổng & hạn
-            $draft->expires_at      = $until;
-            $draft->total_price     = $total;
-            $draft->discount_amount = $draft->discount_amount ?? 0;
-            $draft->save();
+            // 4.2 Đảm bảo legs tồn tại cho từng trip
+            $legMap = []; // [tripId => DraftCheckoutLeg]
+            $existingLegs = DraftCheckoutLeg::query()
+                ->where('draft_checkout_id', $draft->id)
+                ->whereIn('trip_id', array_keys($seatsByTrip))
+                ->get()
+                ->keyBy('trip_id');
 
-            // 3) Đồng bộ items: xoá ghế thừa, upsert ghế hiện có
-            $existing = $draft->items()->pluck('seat_id')->all();
-            $toDelete = array_diff($existing, $seatIds);
-            if (!empty($toDelete)) {
-                DraftCheckoutItem::where('draft_checkout_id', $draft->id)
-                    ->whereIn('seat_id', $toDelete)->delete();
-            }
-
-            foreach ($seatIds as $sid) {
-                $snap = $pricing[$sid] ?? null;
-                if (!$snap) {
-                    throw new \RuntimeException("Thiếu snapshot cho seat {$sid}");
+            $newLegRows = [];
+            $now = now();
+            foreach ($seatsByTrip as $tripId => $_) {
+                if (isset($existingLegs[$tripId])) {
+                    $legMap[$tripId] = $existingLegs[$tripId];
+                } else {
+                    $newLegRows[] = [
+                        'draft_checkout_id' => $draft->id,
+                        'trip_id'           => $tripId,
+                        'leg'               => $legsByTrip[$tripId] ?? null,
+                        'total_price'       => 0,
+                        'created_at'        => $now,
+                        'updated_at'        => $now,
+                    ];
                 }
-                DraftCheckoutItem::updateOrCreate(
-                    ['draft_checkout_id' => $draft->id, 'seat_id' => $sid],
-                    [
-                        'price'      => (int)$snap['price'],
-                        'seat_label' => $snap['label'],
-                        'fare_id'    => $snap['fare_id'] ?? null,
-                    ]
-                );
             }
-
-            return $draft->fresh(['items']);
-        });
-    }
-
-    /**
-     * PATCH draft: cập nhật passenger/pickup/dropoff/coupon...
-     * (Gọi ở bước sau, không dùng ngay sau lock.)
-     */
-    public function updateDraft(int|string $draftId, array $payload): DraftCheckout
-    {
-        return DB::transaction(function () use ($draftId, $payload) {
-            /** @var DraftCheckout $draft */
-            $draft = DraftCheckout::whereKey($draftId)
-                ->whereIn('status', ['pending','paying'])
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $assignables = [
-                'passenger_name','passenger_phone','passenger_email',
-                'pickup_location_id','dropoff_location_id',
-                'pickup_address','dropoff_address',
-                'pickup_snapshot','dropoff_snapshot',
-                'booker_name','booker_phone',
-                'coupon_id','notes'
-            ];
-            foreach ($assignables as $f) {
-                if (array_key_exists($f, $payload)) $draft->{$f} = $payload[$f];
-            }
-            if (isset($payload['passenger_info']) && is_array($payload['passenger_info'])) {
-                $draft->passenger_info = array_merge($draft->passenger_info ?? [], $payload['passenger_info']);
-            }
-            if (array_key_exists('discount_amount', $payload)) {
-                $draft->discount_amount = (int)$payload['discount_amount'];
-            }
-
-            $draft->save();
-            return $draft->fresh(['items']);
-        });
-    }
-
-    /**
-     * Cập nhật draft theo session token và draft ID
-     * Được sử dụng trong CheckoutController để cập nhật thông tin thanh toán
-     */
-    public function updateDraftBySession(int|string $draftId, string $sessionToken, array $payload): DraftCheckout
-    {
-        return DB::transaction(function () use ($draftId, $sessionToken, $payload) {
-            /** @var DraftCheckout $draft */
-            $draft = DraftCheckout::whereKey($draftId)
-                ->where('session_token', $sessionToken)
-                ->whereIn('status', ['pending','paying'])
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            // Các field có thể cập nhật từ payload
-            $assignables = [
-                'passenger_name','passenger_phone','passenger_email',
-                'pickup_location_id','dropoff_location_id',
-                'pickup_address','dropoff_address',
-                'pickup_snapshot','dropoff_snapshot',
-                'booker_name','booker_phone',
-                'coupon_id','notes',
-                'payment_provider','payment_intent_id',
-                'status','completed_at','booking_id'
-            ];
-
-            foreach ($assignables as $field) {
-                if (array_key_exists($field, $payload)) {
-                    $draft->{$field} = $payload[$field];
+            if (!empty($newLegRows)) {
+                DraftCheckoutLeg::insert($newLegRows);
+                $inserted = DraftCheckoutLeg::query()
+                    ->where('draft_checkout_id', $draft->id)
+                    ->whereIn('trip_id', array_keys($seatsByTrip))
+                    ->get()
+                    ->keyBy('trip_id');
+                foreach ($inserted as $tripId => $leg) {
+                    $legMap[$tripId] = $leg;
                 }
             }
 
-            // Xử lý passenger_info đặc biệt
-            if (isset($payload['passenger_info']) && is_array($payload['passenger_info'])) {
-                $draft->passenger_info = array_merge($draft->passenger_info ?? [], $payload['passenger_info']);
+            // 4.3 (Idempotent) Xoá items cũ của các legs “mục tiêu”, rồi insert mới
+            $legIds = array_map(fn($l) => $l->id, $legMap);
+            if (!empty($legIds)) {
+                DraftCheckoutItem::query()
+                    ->whereIn('draft_checkout_leg_id', $legIds)
+                    ->delete();
             }
 
-            // Xử lý discount_amount
-            if (array_key_exists('discount_amount', $payload)) {
-                $draft->discount_amount = (int)$payload['discount_amount'];
+            $itemRows = [];
+            $subtotalDraft = 0;
+            foreach ($seatsByTrip as $tripId => $seatIds) {
+                $leg   = $legMap[$tripId];
+                $snap  = $snapshotsByTrip[$tripId]; // all seats of this trip (already filtered)
+                foreach ($snap as $s) {
+                    if (!in_array($s['seat_id'], $seatIds, true)) continue; // safety
+                    $price = (int)$s['price'];
+                    $itemRows[] = [
+                        'draft_checkout_id'     => $draft->id,
+                        'draft_checkout_leg_id' => $leg->id,
+                        'trip_id'               => $tripId,
+                        'seat_id'               => $s['seat_id'],
+                        'seat_label'            => $s['seat_code'],
+                        'price'                 => $price,
+                        'created_at'            => $now,
+                        'updated_at'            => $now,
+                    ];
+                    $subtotalDraft += $price;
+                }
             }
 
-            // Xử lý payment_expires_at nếu có
-            if (array_key_exists('payment_expires_at', $payload)) {
-                $draft->payment_expires_at = $payload['payment_expires_at'];
+            if (!empty($itemRows)) {
+                DraftCheckoutItem::insert($itemRows);
             }
 
-            $draft->save();
-            return $draft->fresh(['items']);
+            // 4.4 Cập nhật totals từng leg
+            $legTotals = DraftCheckoutItem::query()
+                ->selectRaw('draft_checkout_leg_id, SUM(price) as sum_price')
+                ->whereIn('draft_checkout_leg_id', $legIds)
+                ->groupBy('draft_checkout_leg_id')
+                ->pluck('sum_price', 'draft_checkout_leg_id');
+
+            foreach ($legMap as $tripId => $leg) {
+                $sum = (int)($legTotals[$leg->id] ?? 0);
+                $leg->update([
+                    'subtotal_price' => $sum,
+                    'discount_amount' => 0,
+                    'total_price'    => $sum,
+                ]);
+            }
+
+            // 4.5 Cập nhật totals draft
+            $discountDraft = 0; // TODO: áp dụng coupon nếu có
+            $totalDraft    = max(0, $subtotalDraft - $discountDraft);
+            $draft->update([
+                'total_price'     => $totalDraft,
+                'discount_amount' => $discountDraft,
+            ]);
+
+            // Chuẩn bị response
+            $items = DraftCheckoutItem::query()
+                ->where('draft_checkout_id', $draft->id)
+                ->orderBy('draft_checkout_leg_id')
+                ->get();
+
+            // Gắn leg code (OUT/RETURN) cho từng item
+            $legCodeById = [];
+            foreach ($legMap as $tripId => $leg) {
+                $legCodeById[$leg->id] = $legsByTrip[$tripId] ?? $leg->leg;
+            }
+
+            return [
+                'draft_id'   => $draft->id,
+                'status'     => $draft->status,
+                'expires_at' => $draft->expires_at?->toDateTimeString(),
+                'totals'     => [
+                    'subtotal' => $subtotalDraft,
+                    'discount' => $discountDraft,
+                    'total'    => $totalDraft,
+                ],
+                'items' => $items->map(function ($it) use ($legCodeById) {
+                    return [
+                        'trip_id'    => (int)$it->trip_id,
+                        'leg'        => $legCodeById[$it->draft_checkout_leg_id] ?? null,
+                        'seat_id'    => (int)$it->seat_id,
+                        'seat_label' => $it->seat_label,
+                        'price'      => (int)$it->price,
+                    ];
+                })->values()->all(),
+            ];
         });
+
+        return $result;
     }
 
-    /**
-     * Helper demo: tính giá & snapshot label. Thay bằng TripFare/Promotion thực tế của bạn.
-     *
-     * @param Collection<int,Seat> $seats
-     * @return array<int,array{price:int,label:string,fare_id:int|null}>
-     */
-    protected function computeSeatSnapshots(int $tripId, Collection $seats): array
+    private function loadTripsAndSeats(array $seatsByTrip)
+    {
+        $tripIds = array_keys($seatsByTrip);
+        $trips = Trip::query()
+            ->whereIn('id', $tripIds)
+            ->get()
+            ->keyBy('id');
+
+        $result = [];
+        foreach ($seatsByTrip as $tripId => $seatIds) {
+            $trip = $trips[$tripId] ?? null;
+            if (!$trip) {
+                throw ValidationException::withMessages([
+                    'trips' => ["Trip {$tripId} không tồn tại."],
+                ]);
+            }
+
+            $seats = Seat::query()
+                ->whereIn('id', $seatIds)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($seatIds as $seatId) {
+                if (!isset($seats[$seatId])) {
+                    throw ValidationException::withMessages([
+                        'seats' => ["Seat {$seatId} không tồn tại trong trip {$tripId}."],
+                    ]);
+                }
+            }
+
+            $result[$tripId] = ['trip' => $trip, 'seats' => $seats];
+        }
+        return $result;
+    }
+
+    protected function computeSeatSnapshots(int $tripId, Collection $seats)
     {
         $unitPrice = (int) DB::table('trips')
-                    ->join('routes', 'trips.route_id', '=', 'routes.id')
-                    ->join('trip_stations', 'routes.id', '=', 'trip_stations.route_id')
-                    ->where('trips.id', $tripId)
-                    ->value('trip_stations.price');        
+            ->join('routes', 'trips.route_id', '=', 'routes.id')
+            ->join('trip_stations', 'routes.id', '=', 'trip_stations.route_id')
+            ->where('trips.id', $tripId)
+            ->value('trip_stations.price');
 
         $out = [];
-        foreach ($seats as $s) {
-            $out[$s->id] = [
-                'price'   => $unitPrice ?? 0,
-                'label'   => $s->label ?? $s->seat_number ?? ('S'.$s->id),
-                'fare_id' => null,
+        foreach ($seats as $seat) {
+            $s = Seat::find($seat->id);
+            $out[] = [
+                'seat_id'    => $seat->id,
+                'seat_code'  => $s->seat_number,
+                'price' => $unitPrice,
             ];
         }
+
         return $out;
     }
 }

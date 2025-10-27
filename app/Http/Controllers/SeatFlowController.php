@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Seat;
 use App\Models\Trip;
-use App\Services\DraftCheckoutService\DraftCheckoutService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use App\Services\SeatFlowService;
+use App\Services\DraftCheckoutService\DraftCheckoutService;
 
 class SeatFlowController extends Controller
 {
@@ -16,7 +16,7 @@ class SeatFlowController extends Controller
         private DraftCheckoutService $drafts
     ) {}
 
-    /** Xem trạng thái sơ đồ ghế (có thể để public nếu muốn) */
+    /** Xem trạng thái sơ đồ ghế (theo 1 trip) */
     public function index(Request $request, int $tripId)
     {
         $trip = Trip::find($tripId, ['id', 'bus_id']);
@@ -29,11 +29,11 @@ class SeatFlowController extends Controller
 
         return response()->json([
             'success' => true,
-            'status'  => $this->svc->loadStatus($tripId, $allSeatIds),
+            'status'  => $this->svc->loadStatus($tripId, $allSeatIds), // giữ nguyên hàm loadStatus cũ nếu bạn có
         ]);
     }
 
-    /** Soft-select (tooltip) — yêu cầu login để tránh spam */
+    /** Soft-select (tooltip) — yêu cầu login để tránh spam (giữ nguyên per-trip) */
     public function select(Request $request, int $tripId)
     {
         $trip = Trip::find($tripId, ['id', 'bus_id']);
@@ -58,7 +58,7 @@ class SeatFlowController extends Controller
         return response()->json(['success'=>true, 'message'=>'Selected broadcasted']);
     }
 
-    /** Bỏ soft-select (tooltip) — yêu cầu login */
+    /** Bỏ soft-select (tooltip) — yêu cầu login (giữ nguyên per-trip) */
     public function unselect(Request $request, int $tripId)
     {
         $trip = Trip::find($tripId, ['id', 'bus_id']);
@@ -81,155 +81,141 @@ class SeatFlowController extends Controller
         return response()->json(['success'=>true, 'message'=>'Unselected broadcasted']);
     }
 
-    /** Checkout: LOCK ghế bằng Redis (yêu cầu login + X-Session-Token) */
-    public function checkout(Request $request, int $tripId)
+    /**
+     * NEW: Checkout multi-trip — LOCK ghế cho nhiều trip trong 1 lần (atomic).
+     * Không còn param {tripId} trên route này nữa.
+     *
+     * Body:
+     * {
+     *   "token": "sess_abc123",
+     *   "ttl_seconds": 180,
+     *   "trips": [
+     *     { "trip_id": 101, "seat_ids": [12,13], "leg": "OUT" },
+     *     { "trip_id": 202, "seat_ids": [5],     "leg": "IN"  }
+     *   ]
+     * }
+     */
+    public function checkoutMulti(Request $request)
     {
-        $trip = Trip::find($tripId, ['id', 'bus_id']);
-        if (!$trip) {
-            return response()->json(['success'=>false, 'message'=>'Trip not found'], 404);
-        }
-
         $data = $request->validate([
-            'seat_ids'   => ['required','array','min:1'],
-            'seat_ids.*' => [
-                'integer',
-                Rule::exists('seats','id')->where(fn($q) => $q->where('bus_id', $trip->bus_id)),
-            ],
-            'ttl'        => ['nullable','integer','min:10','max:600'],
-            'from_location_id' => ['nullable','integer','exists:locations,id'],
-            'to_location_id'   => ['nullable','integer','exists:locations,id'],
+            'token'       => ['nullable','string','max:128'],
+            'ttl_seconds' => ['nullable','integer','min:10','max:1200'],
+            'trips'       => ['required','array','min:1'],
+            'trips.*.trip_id'  => ['required','integer','exists:trips,id'],
+            'trips.*.seat_ids' => ['required','array','min:1'],
+            'trips.*.seat_ids.*' => ['required','integer','exists:seats,id'],
+            'trips.*.leg'       => ['nullable','string','max:10'], // OUT/IN nếu bạn dùng
         ]);
 
-        $userId = (int) $request->user()->id;
-        $token  = $request->header('X-Session-Token') ?? (string)$userId; 
-
-        $result = $this->svc->checkout(
-            $tripId,
-            $data['seat_ids'],
-            $token,
-            $data['ttl'] ?? 180,
-            6,
-            $userId,
-            $data['from_location_id'] ?? null,
-            $data['to_location_id'] ?? null
-        );
-
-        // Map ID -> số ghế để hiển thị đẹp
-        $allIds  = array_values(array_unique(array_merge($result['failed'] ?? [], $result['locked'] ?? [])));
-        $seatMap = empty($allIds)
-            ? collect()
-            : Seat::whereIn('id', $allIds)->pluck('seat_number', 'id');
-
-        if (!empty($result['failed'])) {
-            $failedNumbers = collect($result['failed'])->map(fn($id) => $seatMap[$id] ?? (string)$id)->all();
-            $list = implode(', ', $failedNumbers);
-
-            return response()->json([
-                'success'    => false,
-                'locked'     => [],
-                'failed'     => $failedNumbers,
-                'failed_ids' => $result['failed'],
-                'message'    => "Ghế {$list} đang được người khác giữ/đặt. Vui lòng chọn ghế khác.",
-            ], 409);
+        // (Tuỳ chọn) ràng buộc seat thuộc đúng bus của trip tương ứng
+        // Bạn có thể bỏ nếu đã đảm bảo ở service.
+        foreach ($data['trips'] as $t) {
+            $busId = Trip::where('id', $t['trip_id'])->value('bus_id');
+            $cnt   = Seat::whereIn('id', $t['seat_ids'])->where('bus_id', $busId)->count();
+            if ($cnt !== count($t['seat_ids'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Một số seat không thuộc bus của trip tương ứng.',
+                    'meta'    => ['trip_id'=>$t['trip_id']]
+                ], 422);
+            }
         }
 
-        $ttl = (int) ($data['ttl'] ?? 180);
-        $draft = $this->drafts->startFromLockedSeats(
-            tripId:       $tripId,
-            seatIds:      $result['locked'],
-            sessionToken: $token,
-            userId:       $userId ?: null,
-            ttlSeconds:   $ttl,
-            fromLocationId: $data['from_location_id'] ?? null,
-            toLocationId: $data['to_location_id'] ?? null
+        $userId = (int) optional($request->user())->id;
+        $token  = (string)($data['token'] ?? ($request->header('X-Session-Token') ?? (string)$userId));
+        $ttl    = (int)($data['ttl_seconds'] ?? \App\Services\SeatFlowService::DEFAULT_TTL);
+
+        $res = $this->svc->checkout(
+            trips: $data['trips'],
+            token: $token,
+            ttlSeconds: $ttl,
+            maxPerSessionPerTrip: \App\Services\SeatFlowService::MAX_PER_SESSION_PER_TRIP,
+            userId: $userId ?: null
         );
 
-        $lockedNumbers = collect($result['locked'])->map(fn($id) => $seatMap[$id] ?? (string)$id)->all();
-
-        return response()->json([
-            'success'         => true,
-            'locked'          => $lockedNumbers,          // ví dụ ["A1","A2"]
-            'locked_ids'      => $result['locked'],       // id nguyên bản
-            'failed'          => [],
-            'lock_expires_at' => $result['lock_expires_at'],
-            'message'         => 'Đã giữ chỗ. Vui lòng điền thông tin & thanh toán.',
-        ]);
+        return response()->json($res, $res['success'] ? 200 : 409);
     }
 
-    /** Release lock: bỏ giữ chỗ (yêu cầu login + X-Session-Token) */
-    public function release(Request $request, int $tripId)
+    /**
+     * NEW: Release lock theo token + danh sách trip (không release lẻ từng ghế).
+     *
+     * Body:
+     * {
+     *   "token": "sess_abc123",
+     *   "trip_ids": [101, 202]
+     * }
+     */
+    public function releaseByToken(Request $request)
     {
-        $trip = Trip::find($tripId, ['id', 'bus_id']);
-        if (!$trip) {
-            return response()->json(['success'=>false, 'message'=>'Trip not found'], 404);
-        }
-
         $data = $request->validate([
-            'seat_ids'   => ['required','array','min:1'],
-            'seat_ids.*' => [
-                'integer',
-                Rule::exists('seats','id')->where(fn($q) => $q->where('bus_id', $trip->bus_id)),
-            ],
+            'token'    => ['nullable','string','max:128'],
+            'trip_ids' => ['required','array','min:1'],
+            'trip_ids.*' => ['required','integer','exists:trips,id'],
         ]);
 
-        $userId = (int) $request->user()->id;
-        $token  = $request->header('X-Session-Token') ?? (string)$userId;
+        $userId = (int) optional($request->user())->id;
+        $token  = (string)($data['token'] ?? ($request->header('X-Session-Token') ?? (string)$userId));
 
-        $result = $this->svc->release($tripId, $data['seat_ids'], $token, $userId);
+        $released = $this->svc->releaseByToken($data['trip_ids'], $token);
 
         return response()->json([
             'success'  => true,
-            'released' => $result['released'],
-            'failed'   => $result['failed'],
+            'released' => $released
         ]);
     }
 
     /**
-     * Confirm (sau thanh toán thành công) -> BOOKED (ghi DB)
-     * Client gọi với JWT + idempotency_key để chống double-submit.
-     * Nếu có webhook từ cổng thanh toán, hãy làm route/controller riêng để verify HMAC.
+     * NEW: Confirm theo draft (khuyến nghị).
+     * Body:
+     * {
+     *   "draft_id": 123,
+     *   "idempotency_key": "confirm-abc-001"
+     * }
+     *
+     * Gợi ý luồng:
+     * - Tải draft + items -> build $tripSeatMap [tripId => [seatIds...]]
+     * - $this->svc->assertMultiLockedByToken($tripSeatMap, $draft->session_token)
+     * - DB::transaction finalize tạo nhiều Booking từ draft (hoặc 1 Booking gộp tuỳ nghiệp vụ)
      */
     public function confirm(Request $request)
     {
         $data = $request->validate([
-            'trip_id'         => ['required','integer','exists:trips,id'],
-            'seat_ids'        => ['required','array','min:1'],
-            'seat_ids.*'      => ['integer','exists:seats,id'],
+            'draft_id'        => ['required','integer','exists:draft_checkouts,id'],
             'idempotency_key' => ['required','string','max:64'],
         ]);
 
-        // Optionally validate seat thuộc đúng bus của trip:
-        $busId = Trip::where('id', $data['trip_id'])->value('bus_id');
-        $count = Seat::whereIn('id', $data['seat_ids'])->where('bus_id', $busId)->count();
-        if ($count !== count($data['seat_ids'])) {
-            return response()->json(['success'=>false, 'message'=>'Seat(s) not belong to trip bus'], 422);
+        $draft = $this->drafts->findWithItems($data['draft_id']); // bạn cần có hàm hỗ trợ (hoặc DraftCheckout::with('items')->find())
+        if (!$draft) {
+            return response()->json(['success'=>false,'message'=>'Draft not found'], 404);
         }
 
-        $userId = (int) $request->user()->id;
-        $token  = $request->header('X-Session-Token') ?? (string)$userId;
+        // Build map trip => seatIds từ draft
+        $tripSeatMap = [];
+        foreach ($draft->items as $it) {
+            $tripSeatMap[(int)$it->trip_id][] = (int)$it->seat_id;
+        }
 
-        $res = $this->svc->markBooked(
-            $data['trip_id'],
-            $data['seat_ids'],
-            $token,
-            $userId,
-            $data['idempotency_key']
-        );
-
-        if (!empty($res['failed'])) {
+        // Xác nhận còn lock trước khi finalize
+        try {
+            $this->svc->assertMultiLockedByToken($tripSeatMap, $draft->session_token);
+        } catch (\Throwable $e) {
             return response()->json([
-                'success' => false,
-                'booked'  => $res['booked'] ?? [],
-                'failed'  => $res['failed'],
-                'message' => 'Một số ghế đã được đặt trước đó.',
+                'success'=>false,
+                'message'=>'Lock đã hết hạn hoặc không còn thuộc về phiên này.',
+                'error'  => $e->getMessage(),
             ], 409);
         }
 
+        // TODO: finalize booking từ draft (gọi BookingService / DraftCheckoutService)
+        // ví dụ:
+        // $booking = app(\App\Services\Checkout\BookingService::class)
+        //     ->finalizeFromDraft($draft, $data['idempotency_key']);
+
+        // Ở đây tạm trả về thành công giả lập:
         return response()->json([
             'success'    => true,
-            'booking_id' => $res['booking_id'] ?? null,
-            'booked'     => $res['booked'] ?? [],
-            'message'    => 'Đặt ghế thành công.',
+            'booking_id' => null, // điền id thực tế nếu đã finalize
+            'message'    => 'Đã xác nhận thanh toán & sẵn sàng finalize booking.',
         ]);
     }
 }
