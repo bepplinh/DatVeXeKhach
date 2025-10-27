@@ -8,7 +8,7 @@ API AI Trip Search cho phép người dùng tìm kiếm chuyến xe bằng ngôn
 
 ### 1. POST `/api/ai/search-trips`
 
-Tìm kiếm chuyến xe sử dụng AI với validation route đầy đủ.
+Tìm kiếm chuyến xe sử dụng AI với validation route đầy đủ và response thân thiện.
 
 **Request Body:**
 ```json
@@ -20,6 +20,8 @@ Tìm kiếm chuyến xe sử dụng AI với validation route đầy đủ.
 **Response:**
 ```json
 {
+  "success": true,
+  "message": "Tôi đã tìm thấy 3 chuyến xe từ Thanh Hóa đến Hà Nội vào 2024-01-15. Có tổng cộng 45 ghế trống. Giá từ 180,000đ đến 250,000đ.",
   "filters": {
     "origin": "Thanh Hóa",
     "destination": "Hà Nội", 
@@ -58,13 +60,58 @@ Tìm kiếm chuyến xe sử dụng AI với validation route đầy đủ.
         "to_city_id": 2
       }
     }
-  ]
+  ],
+  "summary": {
+    "total_trips": 3,
+    "available_seats": 45,
+    "price_range": {
+      "min": 180000,
+      "max": 250000
+    },
+    "bus_types": ["Limousine", "Giường nằm"]
+  }
 }
 ```
 
 ### 2. POST `/api/ai/search-trips-by-route`
 
 Tìm kiếm chuyến xe với thông tin route chi tiết hơn.
+
+### 3. POST `/api/ai/help`
+
+Nhận hướng dẫn và trợ giúp sử dụng chatbot.
+
+**Request Body:**
+```json
+{
+  "query": "help cách tìm"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "type": "help",
+  "topic": "cách tìm",
+  "message": "Đây là hướng dẫn về cách tìm:",
+  "content": {
+    "title": "Cách tìm chuyến xe",
+    "examples": [
+      "Có chuyến xe nào từ Hà Nội đi TP.HCM mai không?",
+      "Tìm 2 vé từ Đà Nẵng đến Huế sáng mai",
+      "Chuyến xe từ Thanh Hóa về Hà Nội tối nay",
+      "Xe limousine từ Hà Nội đi TP.HCM dưới 500k"
+    ],
+    "tips": [
+      "Nói rõ điểm đi và điểm đến",
+      "Chỉ định thời gian: hôm nay, mai, sáng, chiều, tối",
+      "Mention số vé cần thiết",
+      "Có thể yêu cầu loại xe cụ thể"
+    ]
+  }
+}
+```
 
 **Request Body:**
 ```json

@@ -29,10 +29,10 @@ class DatabaseSeeder extends Seeder
             LocationSeeder::class,
             RouteSeeder::class,
             TripStationSeeder::class,
-            TripSeeder::class,
             SeatLayoutTemplateSeeder::class,
             BusSeeder::class,
             SeatSeeder::class,
+            TripSeeder::class,
             ScheduleTemplateTripSeeder::class
         ]);
     }

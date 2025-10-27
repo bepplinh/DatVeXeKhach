@@ -11,9 +11,30 @@ class RouteSeeder extends Seeder
     {
         // Define some city pairs by name (must exist in LocationSeeder as type=city)
         $pairs = [
+            // Routes từ Hà Nội
             ['from' => 'Hà Nội', 'to' => 'Thanh Hóa'],
             ['from' => 'Hà Nội', 'to' => 'Ninh Bình'],
             ['from' => 'Hà Nội', 'to' => 'Nam Định'],
+            ['from' => 'Hà Nội', 'to' => 'TP.HCM'],
+            ['from' => 'Hà Nội', 'to' => 'Đà Nẵng'],
+            ['from' => 'Hà Nội', 'to' => 'Huế'],
+            
+            // Routes từ TP.HCM
+            ['from' => 'TP.HCM', 'to' => 'Đà Nẵng'],
+            ['from' => 'TP.HCM', 'to' => 'Huế'],
+            ['from' => 'TP.HCM', 'to' => 'Hà Nội'],
+            
+            // Routes từ Đà Nẵng
+            ['from' => 'Đà Nẵng', 'to' => 'Huế'],
+            ['from' => 'Đà Nẵng', 'to' => 'Hà Nội'],
+            ['from' => 'Đà Nẵng', 'to' => 'TP.HCM'],
+            
+            // Routes từ Huế
+            ['from' => 'Huế', 'to' => 'Đà Nẵng'],
+            ['from' => 'Huế', 'to' => 'Hà Nội'],
+            ['from' => 'Huế', 'to' => 'TP.HCM'],
+            
+            // Routes nội bộ miền Bắc
             ['from' => 'Hà Nam', 'to' => 'Ninh Bình'],
             ['from' => 'Nam Định', 'to' => 'Thanh Hóa'],
             ['from' => 'Thanh Hóa', 'to' => 'Ninh Bình'],

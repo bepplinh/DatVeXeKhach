@@ -17,38 +17,42 @@ class TripSearchService
         int $toLocationId,
         string $dateYmd,
         array $filters
-    )
-    {
-        $now = Carbon::now(); 
+    ) {
+        $now = Carbon::now();
 
         $routeId = TripStation::query()
-        ->where('from_location_id', $fromLocationId)
-        ->where('to_location_id', $toLocationId)
-        ->pluck('route_id');
+            ->where('from_location_id', $fromLocationId)
+            ->where('to_location_id', $toLocationId)
+            ->pluck('route_id');
 
         if ($routeId->isEmpty()) return [];
 
-        $dateStart = $dateYmd.' 00:00:00';
-        $dateEnd   = $dateYmd.' 23:59:59';
+        $dateStart = $dateYmd . ' 00:00:00';
+        $dateEnd   = $dateYmd . ' 23:59:59';
 
         $q = Trip::query()
-            ->with(['route','route.tripStations' => function ($q) use ($fromLocationId, $toLocationId) {
-                $q->where('from_location_id', $fromLocationId)
-                  ->where('to_location_id', $toLocationId);
-            },
-            'bus.typeBus', 'bus.seatLayoutTemplate']) 
+            ->with([
+                'route',
+                'route.tripStations' => function ($q) use ($fromLocationId, $toLocationId) {
+                    $q->where('from_location_id', $fromLocationId)
+                        ->where('to_location_id', $toLocationId);
+                },
+                'bus.typeBus',
+                'bus.seatLayoutTemplate'
+            ])
             ->whereIn('route_id', $routeId)
             ->whereBetween('departure_time', [$dateStart, $dateEnd]);
 
         // ====== FILTERS ======
-        if(!empty($filters['bus_type'])) {
-           $ids = (array)$filters['bus_type'];
-           $q->whereHas('bus.typeBus', fn($sub) => $sub->whereIn('id', $ids));
+        if (!empty($filters['bus_type'])) {
+            $ids = (array)$filters['bus_type'];
+            $q->whereHas('bus.typeBus', fn($sub) => $sub->whereIn('id', $ids));
         }
 
         if (!empty($filters['time_from']) && !empty($filters['time_to'])) {
             $q->whereBetween(DB::raw('TIME(departure_time)'), [
-                $filters['time_from'], $filters['time_to']
+                $filters['time_from'],
+                $filters['time_to']
             ]);
         }
 
@@ -79,7 +83,7 @@ class TripSearchService
 
 
         // chuẩn hoá output và filter theo số ghế còn trống
-        $results = $rows->map(function ($trip) use ($filters, $counters) {
+        $results = $rows->map(function ($trip) use ($filters, $counters, $fromLocationId, $toLocationId) {
             $tripStation = $trip->route?->tripStations?->first();
             if (!$tripStation) return null;
 
@@ -105,28 +109,33 @@ class TripSearchService
             }
 
             return [
-                'id'              => $trip->id,
+                'trip_id'              => $trip->id,
                 'route_id'        => $trip->route_id,
                 'route_name'      => $trip->route->name ?? null,
                 'bus_id'          => $trip->bus_id,
-                'day'             => $dep ? $dep->format('Y-m-d') : null,  
+                'day'             => $dep ? $dep->format('Y-m-d') : null,
                 'departure_time'  => $dep ? $dep->format('H:i') : null,
                 'arrival_time'    => $arrival ? $arrival->format('H:i') : null,
 
                 'duration'       => $duration,
-                'duration_text'  => ($hours ? $hours.'h' : '') . ($minutes ? $minutes.'m' : '0m'),
+                'duration_text'  => ($hours ? $hours . 'h' : '') . ($minutes ? $minutes . 'm' : '0m'),
 
                 'price'           => optional(optional($trip->route)->tripStations->first())->price ?? null,
                 'total_seats'     => $total_seats,
                 'seats_booked'    => $booked,
                 'seats_locked'    => $locked,
                 'available_seats' => $available,
+                
+                // Location IDs cho segment được search
+                'from_location_id' => $fromLocationId,
+                'to_location_id'   => $toLocationId,
+                
                 'bus' => [
                     'name'         => optional($trip->bus)->name,
                     'code'         => optional($trip->bus)->code,
                     'plate_number' => optional($trip->bus)->plate_number,
                     'type'         => optional(optional($trip->bus)->typeBus)->name,
-                   
+
                 ],
                 'route' => [
                     'from_city_id' => optional($trip->route)->from_city,

@@ -4,41 +4,50 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon; // Đảm bảo sử dụng Carbon
 
 class TripSeeder extends Seeder
 {
+    /**
+     * Chạy các seeder database để chèn 2 chuyến cố định.
+     */
     public function run(): void
     {
-        $routes = DB::table('routes')->get();
-        $buses = DB::table('buses')->get();
+        // 1. Tính toán thời gian khởi hành (Ngày mai lúc 8:00 và 14:30)
+        $tomorrow_morning = Carbon::now()->addDays(1)->setTime(8, 0);
+        $tomorrow_afternoon = Carbon::now()->addDays(1)->setTime(14, 30);
+        
+        // 2. Định nghĩa dữ liệu cần chèn
+        $trips_to_seed = [
+            [
+                // Chuyến 1
+                'route_id'       => 1, // Route ID cố định
+                'bus_id'         => 1, // Bus ID cố định
+                'departure_time' => $tomorrow_morning,
+                'status'         => 'scheduled',
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ],
+            [
+                // Chuyến 2
+                'route_id'       => 2, // Route ID cố định
+                'bus_id'         => 2, // Bus ID cố định
+                'departure_time' => $tomorrow_afternoon,
+                'status'         => 'scheduled',
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ],
+        ];
 
-        // Kiểm tra có buses không
-        if ($buses->isEmpty()) {
-            $this->command->warn('⚠️  No buses found! Please run BusSeeder first.');
-            return;
-        }
+        // 3. Xóa dữ liệu cũ (tùy chọn, để tránh trùng lặp nếu chạy lại seeder)
+        // Lưu ý: Nếu cột 'trip_id' là auto-increment, bạn không cần chèn nó.
+        // Tôi sẽ chèn dữ liệu mà không cần chỉ định 'trip_id', để nó tự động tăng.
+        // Tuy nhiên, nếu bạn muốn đảm bảo trip_id là 1 và 2, bạn cần reset hoặc xử lý khóa chính.
+        
+        // Giả định 'id' (trip_id) là auto-increment và chỉ chèn các trường dữ liệu.
 
-        foreach ($routes as $route) {
-            // Tạo 3-4 chuyến cho mỗi route với bus khác nhau
-            $times = [
-                now()->addDays(1)->setTime(8, 0),   // 8:00 sáng mai
-                now()->addDays(1)->setTime(14, 30), // 2:30 chiều mai
-                now()->addDays(2)->setTime(6, 30),  // 6:30 sáng ngày kia
-                now()->addDays(2)->setTime(20, 0),  // 8:00 tối ngày kia
-            ];
+        DB::table('trips')->insert($trips_to_seed);
 
-            foreach ($times as $index => $time) {
-                $bus = $buses->get($index % $buses->count()); // Chọn bus theo vòng lặp
-                
-                DB::table('trips')->insert([
-                    'route_id'       => $route->id,
-                    'bus_id'         => $bus->id,
-                    'departure_time' => $time,
-                    'status'         => 'scheduled',
-                    'created_at'     => now(),
-                    'updated_at'     => now(),
-                ]);
-            }
-        }
+        $this->command->info('✅ Seeded 2 fixed trips (Route 1/Bus 1 and Route 2/Bus 2) for tomorrow.');
     }
 }

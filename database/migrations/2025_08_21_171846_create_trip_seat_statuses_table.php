@@ -28,11 +28,6 @@ return new class extends Migration {
         
             // Không cho 2 bản ghi cùng (trip,seat)
             $table->unique(['trip_id','seat_id']);
-        
-            // Index phục vụ truy vấn phổ biến
-            $table->index(['trip_id','is_booked']);  
-            $table->index(['trip_id','seat_id']);     
-            $table->index(['trip_id','lock_expires_at']);  
         });
         
     }

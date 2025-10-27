@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DraftCheckout extends Model
 {
+    protected $table = 'draft_checkouts';
     protected $fillable = [
         'trip_id',
         'user_id',
@@ -30,6 +31,11 @@ class DraftCheckout extends Model
         'expires_at',
         'completed_at',
     ];
+
+    public function legs()
+    {
+        return $this->hasMany(DraftCheckoutLeg::class, 'draft_checkout_id');
+    }
 
     public function items()
     {

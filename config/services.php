@@ -56,9 +56,6 @@ return [
     'gemini' => [
         'key' => env('GEMINI_APP_KEY'),
         'endpoint' => env('GEMINI_ENDPOINT'),
-        'model' => env('GEMINI_MODEL'),
-        'base'    => env('GEMINI_BASE', 'https://generativelanguage.googleapis.com'),
-        'version' => env('GEMINI_VERSION', 'v1beta'),
-        'timeout' => env('GEMINI_TIMEOUT', 20),
+        'model' => env('GEMINI_MODEL')
     ]
 ];
