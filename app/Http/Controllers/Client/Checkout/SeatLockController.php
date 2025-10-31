@@ -26,8 +26,7 @@ class SeatLockController extends Controller
             'trips.*.trip_id'  => ['required', 'integer', 'min:1'],
             'trips.*.seat_ids' => ['required', 'array', 'min:1'],
             'trips.*.seat_ids.*' => ['required', 'integer', 'min:1'],
-            'trips.*.leg'                  => 'nullable|string|in:OUT,RETURN',
-            'ttl'                     => 'nullable|integer|min:30|max:3600',
+            'trips.*.leg'                  => 'nullable|string|in:OUT,RETURN'
         ]);
 
         $ttl = (int) (SeatLockService::DEFAULT_TTL);

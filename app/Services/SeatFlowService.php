@@ -180,7 +180,7 @@ class SeatFlowService
      * Nhả ghế theo token cho danh sách trip (dùng khi hủy/timeout).
      * @return int Số ghế đã DEL
      */
-    public function releaseByToken(array $tripIds, string $token): int
+    public function releaseLocksAfterBooked(array $tripIds, string $token): int
     {
         $this->ensureLuaLoaded();
         $tripIds = array_values(array_unique(array_map('intval', $tripIds)));

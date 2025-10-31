@@ -57,7 +57,7 @@ class UpdateDraftPayment
             if (isset($payload['legs']) && is_array($payload['legs'])) {
                 foreach ($payload['legs'] as $legData) {
                     $legType = strtoupper($legData['leg_type'] ?? 'OUT'); // OUT hoặc RETURN
-                    $leg = $draft->legs->firstWhere('leg_type', $legType);
+                    $leg = $draft->legs->firstWhere('leg', $legType);
 
                     if ($leg) {
                         $legAssignables = [

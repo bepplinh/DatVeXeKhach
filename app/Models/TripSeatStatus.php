@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TripSeatStatus extends Model
 {
-    protected $fillable = ['trip_id', 'seat_id', 'is_booked', 'booked_by', 'locked_by', 'lock_expires_at'];
-    protected $casts = ['is_booked' => 'boolean', 'lock_expires_at' => 'datetime'];
+    protected $fillable = ['trip_id', 'seat_id', 'is_booked', 'booked_by_user_id'];
+    protected $casts = ['is_booked' => 'boolean'];
 
     public function trip(): BelongsTo
     {

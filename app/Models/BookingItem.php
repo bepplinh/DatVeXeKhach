@@ -3,17 +3,17 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class BookingItem extends Model
 {
+    use HasFactory;
+    protected $table = 'booking_items';
     protected $fillable = [
-        'booking_id',
+        'booking_leg_id',
         'seat_id',
-        'origin_location_id',
-        'destination_location_id',
-        'pickup_address',
-        'dropoff_address',
-        'price',
+        'seat_label',
+        'price'
     ];
 
     public function booking()
@@ -24,15 +24,5 @@ class BookingItem extends Model
     public function seat()
     {
         return $this->belongsTo(Seat::class);
-    }
-
-    public function originLocation()
-    {
-        return $this->belongsTo(Location::class, 'origin_location_id');
-    }
-
-    public function destinationLocation()
-    {
-        return $this->belongsTo(Location::class, 'destination_location_id');
     }
 }

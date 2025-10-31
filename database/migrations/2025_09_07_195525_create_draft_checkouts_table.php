@@ -47,9 +47,6 @@ return new class extends Migration
             $table->timestamp('expires_at')->index();
             $table->timestamp('completed_at')->nullable();
         
-            // Liên kết booking sau khi hoàn tất (tùy chọn)
-            $table->foreignId('booking_id')->nullable()->constrained('bookings')->nullOnDelete();
-        
             $table->timestamps();
         });
         

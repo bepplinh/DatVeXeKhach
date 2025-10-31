@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
             $table->string('code')->unique(); 
-            $table->foreignId('trip_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('coupon_id')->nullable()->constrained('coupons')->nullOnDelete();
             $table->decimal('subtotal_price', 10, 0)->default(0);
@@ -30,13 +29,6 @@ return new class extends Migration
             $table->string('passenger_name')->nullable();
             $table->string('passenger_phone')->nullable();
             $table->string('passenger_email')->nullable();
-
-            $table->unsignedBigInteger('origin_location_id');  // điểm đón
-            $table->unsignedBigInteger('destination_location_id'); // điểm trả
-            $table->foreign('origin_location_id')->references('id')->on('locations');
-            $table->foreign('destination_location_id')->references('id')->on('locations');
-            $table->string('pickup_address')->nullable();
-            $table->string('dropoff_address')->nullable();
 
             $table->timestamps();
             $table->timestamp('paid_at')->nullable();

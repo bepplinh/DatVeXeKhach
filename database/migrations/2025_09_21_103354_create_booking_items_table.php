@@ -13,16 +13,12 @@ return new class extends Migration
     {
         Schema::create('booking_items', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('booking_id');
-            $table->unsignedBigInteger('seat_id')->nullable(); // nếu chọn chỗ ngồi
+            $table->foreignId('booking_leg_id')->constrained('booking_legs')->cascadeOnDelete();
+            $table->foreignId('seat_id')->constrained('seats')->cascadeOnDelete(); 
             $table->string('seat_label')->nullable(); 
 
             $table->integer('price'); // giá của từng vé
             $table->timestamps();
-
-            $table->foreign('booking_id')->references('id')->on('bookings')->cascadeOnDelete();
-            $table->foreign('seat_id')->references('id')->on('seats')->nullOnDelete();
-           
         });
     }
 

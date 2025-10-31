@@ -43,7 +43,12 @@ class PayOSService
         $draft->loadMissing('items');
 
         $amount = (int) ($draft->total_price ?? 0);
-        $items  = [];
+        if ($amount <= 0) {
+            throw new \RuntimeException("Invalid amount: $amount");
+        }
+
+        // 1) Build items
+        $items = [];
         foreach ($draft->items as $item) {
             $items[] = [
                 'name'     => 'Ghế ' . (string) ($item->seat_label ?? 'N/A'),
@@ -51,31 +56,42 @@ class PayOSService
                 'price'    => (int) ($item->price ?? 0),
             ];
         }
-
         $sum = array_sum(array_map(fn($i) => (int)$i['price'] * (int)$i['quantity'], $items));
         if ($sum !== $amount) {
-            throw new RuntimeException("Amount mismatch: items=$sum != amount=$amount");
+            throw new \RuntimeException("Amount mismatch: items=$sum != amount=$amount");
         }
 
+        // 2) orderCode: unique, map về draft.payment_intent_id
         $orderCode   = (int) (now()->format('ymdHis') . random_int(100, 999));
-        $description = 'Thanh toán đơn hàng';
+        $description = 'Thanh toán đơn hàng #' . $draft->id;
 
-        // ⚠️ KÝ chỉ trên 5 field
+        // 3) expiredAt từ TTL (mặc định 15 phút)
+        $ttlMinutes = $ttlMinutes ?? 15;
+        $expiredAt  = now()->addMinutes($ttlMinutes)->timestamp;
+
+        // 4) Ký đúng 5 fields
         $signData = [
             'amount'      => $amount,
             'orderCode'   => $orderCode,
             'description' => $description,
-            'returnUrl'   => $this->returnUrl,
-            'cancelUrl'   => $this->cancelUrl,
+            'returnUrl'   => $this->returnUrl, // ví dụ https://app.yoursite/checkout/success
+            'cancelUrl'   => $this->cancelUrl, // ví dụ https://app.yoursite/checkout/cancel
         ];
         $signature = $this->signFiveFields($signData, $this->checksumKey);
 
+        // 5) Body gửi PayOS: 5 field đã ký + các field phụ
         $body = [
             ...$signData,
-            'items'     => $items,    // field phụ thêm OK
+            'expiredAt' => $expiredAt, // << dùng TTL
+            'items'     => $items,
+            // tuỳ chọn nếu bạn có trong draft:
+            // 'customerName'  => $draft->passenger_name,
+            // 'customerEmail' => $draft->passenger_email,
+            // 'customerPhone' => $draft->passenger_phone,
             'signature' => $signature,
         ];
 
+        // 6) Call API
         $res = Http::withHeaders([
             'x-api-key'   => $this->apiKey,
             'x-client-id' => $this->clientId,
@@ -88,8 +104,9 @@ class PayOSService
         $json = $res->json();
 
         if (!$res->ok() || (string)($json['code'] ?? '') !== '00') {
-            throw new RuntimeException(
-                'Create payment link failed: ' . json_encode($json, JSON_UNESCAPED_UNICODE)
+            throw new \RuntimeException(
+                'Create payment link failed: HTTP ' . $res->status() . ' ' .
+                    json_encode($json, JSON_UNESCAPED_UNICODE)
             );
         }
 
@@ -99,8 +116,10 @@ class PayOSService
             'orderCode'     => $orderCode,
             'paymentLinkId' => $data->paymentLinkId ?? null,
             'checkoutUrl'   => $data->checkoutUrl ?? null,
+            'expiredAt'     => $expiredAt,
         ];
     }
+
 
     /**
      * Verify webhook.
