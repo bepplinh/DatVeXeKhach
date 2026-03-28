@@ -21,7 +21,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => Authenticate::class,
             'x-session-token' => \App\Http\Middleware\EnsureSessionToken::class
         ]);
-        $middleware->append(CorsMiddleware::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
