@@ -132,12 +132,6 @@ export const SIDEBAR_MENU = [
                 icon: LineChart,
                 path: "/admin/revenue/analysis",
             },
-            {
-                id: "trip-performance",
-                label: "Hiệu suất Chuyến xe",
-                icon: Bus,
-                path: "/admin/trip-performance",
-            },
         ],
     },
     {

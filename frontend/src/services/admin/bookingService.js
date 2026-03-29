@@ -1,6 +1,11 @@
 import axiosClient from "../../apis/axiosClient";
 
 export const adminBookingService = {
+    async getBookings(params = {}) {
+        const response = await axiosClient.get("/admin/bookings", { params });
+        return response.data;
+    },
+
     async createBooking(payload) {
         const response = await axiosClient.post("/admin/bookings", payload);
         return response.data;
@@ -18,7 +23,7 @@ export const adminBookingService = {
 
     async markAsPaid(bookingId) {
         const response = await axiosClient.post(
-            `/admin/bookings/${bookingId}/mark-paid`
+            `/admin/bookings/${bookingId}/mark-paid`,
         );
         return response.data;
     },
@@ -29,7 +34,7 @@ export const adminBookingService = {
             {
                 booking_item_id: bookingItemId,
                 new_seat_id: newSeatId,
-            }
+            },
         );
         return response.data;
     },
@@ -45,7 +50,7 @@ export const adminBookingService = {
                 dropoff_location_id: options.dropoffLocationId || null,
                 pickup_address: options.pickupAddress || null,
                 dropoff_address: options.dropoffAddress || null,
-            }
+            },
         );
         return response.data;
     },
@@ -61,7 +66,7 @@ export const adminBookingService = {
 
     async getRefundPolicy(bookingId) {
         const response = await axiosClient.get(
-            `/admin/bookings/${bookingId}/refund-policy`
+            `/admin/bookings/${bookingId}/refund-policy`,
         );
         return response.data;
     },
@@ -69,7 +74,7 @@ export const adminBookingService = {
     async refundPriceDifference(bookingId, payload) {
         const response = await axiosClient.post(
             `/admin/bookings/${bookingId}/refund-price-difference`,
-            payload
+            payload,
         );
         return response.data;
     },
@@ -77,14 +82,14 @@ export const adminBookingService = {
     async refund(bookingId, payload) {
         const response = await axiosClient.post(
             `/admin/bookings/${bookingId}/refund`,
-            payload
+            payload,
         );
         return response.data;
     },
 
     async markAdditionalPaymentPaid(bookingId) {
         const response = await axiosClient.post(
-            `/admin/bookings/${bookingId}/mark-additional-payment-paid`
+            `/admin/bookings/${bookingId}/mark-additional-payment-paid`,
         );
         return response.data;
     },

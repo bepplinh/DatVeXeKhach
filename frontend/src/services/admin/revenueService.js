@@ -13,7 +13,7 @@ export const revenueService = {
         if (date) queryParams.append("date", date);
 
         const res = await apiClient.get(
-            `/admin/revenue/dashboard?${queryParams.toString()}`
+            `/admin/revenue/dashboard?${queryParams.toString()}`,
         );
         return res.data;
     },
@@ -31,7 +31,7 @@ export const revenueService = {
         if (to_date) queryParams.append("to_date", to_date);
 
         const res = await apiClient.get(
-            `/admin/revenue/trend?${queryParams.toString()}`
+            `/admin/revenue/trend?${queryParams.toString()}`,
         );
         return res.data;
     },
@@ -49,7 +49,7 @@ export const revenueService = {
         if (to_date) queryParams.append("to_date", to_date);
 
         const res = await apiClient.get(
-            `/admin/revenue/top-routes?${queryParams.toString()}`
+            `/admin/revenue/top-routes?${queryParams.toString()}`,
         );
         return res.data;
     },
@@ -67,7 +67,25 @@ export const revenueService = {
         if (to_date) queryParams.append("to_date", to_date);
 
         const res = await apiClient.get(
-            `/admin/revenue/top-trips?${queryParams.toString()}`
+            `/admin/revenue/top-trips?${queryParams.toString()}`,
+        );
+        return res.data;
+    },
+
+    /**
+     * Lấy top khách hàng
+     * @param {Object} params - { limit: number, from_date: 'YYYY-MM-DD', to_date: 'YYYY-MM-DD' }
+     */
+    async getTopCustomers(params = {}) {
+        const { limit = 10, from_date, to_date } = params;
+        const queryParams = new URLSearchParams({
+            limit: limit.toString(),
+        });
+        if (from_date) queryParams.append("from_date", from_date);
+        if (to_date) queryParams.append("to_date", to_date);
+
+        const res = await apiClient.get(
+            `/admin/revenue/top-customers?${queryParams.toString()}`,
         );
         return res.data;
     },
@@ -85,7 +103,7 @@ export const revenueService = {
         if (to_date) queryParams.append("to_date", to_date);
 
         const res = await apiClient.get(
-            `/admin/revenue/analysis?${queryParams.toString()}`
+            `/admin/revenue/analysis?${queryParams.toString()}`,
         );
         return res.data;
     },

@@ -64,7 +64,6 @@ const ClientChatWidget = () => {
             setConversation(detail);
         } catch (error) {
             console.error("Client chat init error", error);
-            toast.error("Không thể khởi tạo hộp chat, vui lòng thử lại sau.");
         } finally {
             setLoading(false);
         }

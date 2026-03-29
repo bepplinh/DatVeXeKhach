@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import { userService } from "../../../services/userService";
 import { toast } from "react-toastify";
-import UserCard from "./components/UserCard";
 import UserFilters from "./components/UserFilters";
 import UserDetailModal from "./components/UserDetailModal";
 import UserFormDialog from "./components/UserFormDialog";
@@ -357,8 +356,8 @@ const User = () => {
                                     key={filter.key}
                                     type="button"
                                     className={`user-management__chip ${activeQuickFilter === filter.key
-                                            ? "user-management__chip--active"
-                                            : ""
+                                        ? "user-management__chip--active"
+                                        : ""
                                         }`}
                                     onClick={() => handleQuickFilter(filter)}
                                 >
@@ -391,50 +390,34 @@ const User = () => {
                     </div>
                 </div>
 
-                {/* DataGrid Table */}
-                {!loading && filteredUsers.length > 0 && (
-                    <UserDataGrid
-                        users={filteredUsers}
-                        onView={(user) => setSelectedUser(user)}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                    />
-                )}
-
+                {/* Content Area */}
                 <div className="user-management__content">
-                    <div className="user-management__users-wrapper">
-                        {loading ? (
-                            <div className="user-management__loading">
-                                <CircularIndeterminate />
-                            </div>
-                        ) : filteredUsers.length === 0 ? (
-                            <div className="user-management__empty">
-                                <p>
-                                    Không tìm thấy người dùng nào phù hợp với bộ
-                                    lọc của bạn.
-                                </p>
-                                <button
-                                    type="button"
-                                    className="user-management__reset-btn"
-                                    onClick={handleResetFilters}
-                                >
-                                    Reset bộ lọc
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="user-management__users">
-                                {filteredUsers.map((user) => (
-                                    <UserCard
-                                        key={user.id}
-                                        user={user}
-                                        onClick={() => setSelectedUser(user)}
-                                        onEdit={handleEdit}
-                                        onDelete={handleDelete}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    {loading ? (
+                        <div className="user-management__loading">
+                            <CircularIndeterminate />
+                        </div>
+                    ) : filteredUsers.length === 0 ? (
+                        <div className="user-management__empty">
+                            <p>
+                                Không tìm thấy người dùng nào phù hợp với bộ
+                                lọc của bạn.
+                            </p>
+                            <button
+                                type="button"
+                                className="user-management__reset-btn"
+                                onClick={handleResetFilters}
+                            >
+                                Reset bộ lọc
+                            </button>
+                        </div>
+                    ) : (
+                        <UserDataGrid
+                            users={filteredUsers}
+                            onView={(user) => setSelectedUser(user)}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                        />
+                    )}
                 </div>
             </div>
 

@@ -67,8 +67,7 @@ function ConfirmationStep({ contactInfo, paymentMethod }) {
                 <div className="confirmationCard__section">
                     <div className="confirmationCard__label">Số điện thoại</div>
                     <div className="confirmationCard__value">
-                        {`${contactInfo.countryCode || ""}${contactInfo.phone || "—"
-                            }`}
+                        {contactInfo.phone || "—"}
                     </div>
                 </div>
                 {contactInfo.isProxyBooking && (
@@ -94,13 +93,13 @@ function ConfirmationStep({ contactInfo, paymentMethod }) {
                 <div className="confirmationCard__section">
                     <div className="confirmationCard__label">Điểm đón</div>
                     <div className="confirmationCard__value">
-                        {contactInfo.pickup || "—"}
+                        {draftData?.contact?.pickup_address || contactInfo.pickup || "—"}
                     </div>
                 </div>
                 <div className="confirmationCard__section">
                     <div className="confirmationCard__label">Điểm trả</div>
                     <div className="confirmationCard__value">
-                        {contactInfo.dropoff || "—"}
+                        {draftData?.contact?.dropoff_address || contactInfo.dropoff || "—"}
                     </div>
                 </div>
                 <div className="confirmationCard__section">

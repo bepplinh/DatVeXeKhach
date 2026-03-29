@@ -1,165 +1,50 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DndContext } from "@dnd-kit/core";
-import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { toast } from "react-toastify";
 import axiosClient from "../../../apis/axiosClient";
+import SeatNode from "./components/SeatNode";
+import useBusData from "./hooks/useBusData";
+import useSeatLayout from "./hooks/useSeatLayout";
+import {
+    clamp,
+    buildClientSeat,
+} from "./utils/seatLayoutUtils";
 import "./SeatLayoutBuilder.scss";
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-const DEFAULT_LEGEND = [
-    { label: "Ghế trống", color: "#E0E7FF" },
-    { label: "Đang giữ", color: "#FDE68A" },
-    { label: "Đã bán", color: "#FCA5A5" },
-];
 
-const applyLayoutDefaults = (layout = {}) => ({
-    decks: layout.decks ?? 1,
-    cell_size: layout.cell_size ?? 40,
-    canvas: {
-        width: layout.canvas?.width ?? 720,
-        height: layout.canvas?.height ?? 480,
-    },
-    legend: layout.legend ?? DEFAULT_LEGEND,
-});
 
-const createClientId = () =>
-(globalThis.crypto?.randomUUID?.() ??
-    Math.random().toString(36).slice(2));
 
-const normalizeClientId = (seat) =>
-    seat?.seat_id !== undefined && seat?.seat_id !== null
-        ? `seat-${seat.seat_id}`
-        : createClientId();
-
-const buildClientSeat = (seat) => ({
-    clientId: normalizeClientId(seat),
-    seat_id: seat?.seat_id ?? null,
-    label: seat?.label ?? "NEW",
-    deck: seat?.deck ?? 1,
-    column_group: seat?.column_group ?? "A",
-    index: seat?.index ?? 0,
-    seat_type: seat?.seat_type ?? "standard",
-    active: seat?.active ?? true,
-    position: {
-        x: seat?.position?.x ?? 20,
-        y: seat?.position?.y ?? 20,
-        w: seat?.position?.w ?? 40,
-        h: seat?.position?.h ?? 40,
-    },
-    meta: seat?.meta ?? {},
-});
-
-function SeatNode({ seat, isActive, onSelect }) {
-    const { attributes, listeners, setNodeRef, transform } = useDraggable({
-        id: seat.clientId,
-        activationConstraint: { distance: 6 }, // prevent accidental drag on click
-    });
-
-    const style = {
-        width: seat.position.w,
-        height: seat.position.h,
-        transform: transform
-            ? CSS.Translate.toString(transform)
-            : undefined,
-        left: seat.position.x,
-        top: seat.position.y,
-    };
-
-    return (
-        <button
-            type="button"
-            ref={setNodeRef}
-            style={style}
-            className={`seat-builder__seat ${isActive ? "seat-builder__seat--active" : ""}`}
-            onClick={(e) => {
-                e.stopPropagation();
-                onSelect(seat.clientId);
-            }}
-            {...listeners}
-            {...attributes}
-        >
-            <span>{seat.label}</span>
-        </button>
-    );
-}
 
 export default function SeatLayoutBuilder() {
     const [searchParams] = useSearchParams();
     const urlBusId = searchParams.get("busId");
 
-    const [buses, setBuses] = useState([]);
-    const [selectedBusId, setSelectedBusId] = useState("");
-    const [layout, setLayout] = useState(applyLayoutDefaults());
-    const [seats, setSeats] = useState([]);
+    const { buses, selectedBusId, setSelectedBusId } = useBusData(urlBusId);
+
+    const {
+        layout,
+        setLayout,
+        seats,
+        setSeats,
+        activeDeck,
+        setActiveDeck,
+        loading,
+        activeSeat,
+        setActiveSeat,
+        selectedSeat,
+    } = useSeatLayout(selectedBusId);
+
     const [seatSearch, setSeatSearch] = useState("");
-    const [activeSeat, setActiveSeat] = useState(null);
-    const [activeDeck, setActiveDeck] = useState(1);
-    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
-
-    useEffect(() => {
-        async function loadBuses() {
-            try {
-                const { data } = await axiosClient.get("/buses", {
-                    params: { per_page: 100 },
-                });
-                const list = data?.data?.data ?? [];
-                setBuses(list);
-                // If busId from URL, select it; otherwise select first bus
-                if (urlBusId && list.some((b) => String(b.id) === String(urlBusId))) {
-                    setSelectedBusId(urlBusId);
-                } else if (list.length && !selectedBusId) {
-                    setSelectedBusId(list[0].id);
-                }
-            } catch (e) {
-                console.error(e);
-                toast.error("Không thể tải danh sách xe");
-            }
-        }
-        loadBuses();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [urlBusId]);
-
-    useEffect(() => {
-        if (!selectedBusId) return;
-        async function loadLayout() {
-            setLoading(true);
-            setActiveSeat(null);
-            try {
-                const { data } = await axiosClient.get(
-                    `/admin/buses/${selectedBusId}/seat-layout`
-                );
-                if (data?.data) {
-                    setLayout(applyLayoutDefaults(data.data.layout));
-                    setSeats(
-                        (data.data.seats || []).map((seat) =>
-                            buildClientSeat(seat)
-                        )
-                    );
-                    setActiveDeck(1);
-                }
-            } catch (e) {
-                console.error(e);
-                toast.error("Không thể tải sơ đồ ghế");
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadLayout();
-    }, [selectedBusId]);
 
     const visibleSeats = useMemo(
         () => seats.filter((seat) => seat.deck === activeDeck),
         [seats, activeDeck]
     );
 
-    const selectedSeat = useMemo(
-        () => seats.find((seat) => seat.clientId === activeSeat),
-        [seats, activeSeat]
-    );
+
 
     const filteredSeats = useMemo(() => {
         const keyword = seatSearch.trim().toLowerCase();

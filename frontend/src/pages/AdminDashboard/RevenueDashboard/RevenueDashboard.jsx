@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { revenueService } from "../../../services/admin/revenueService";
 import { toast } from "react-toastify";
-import { Loader2 } from "lucide-react";
+import {
+    Loader2,
+    TrendingUp,
+    Activity,
+    Map as MapIcon,
+    PieChart,
+    BarChart3
+} from "lucide-react";
 import dayjs from "dayjs";
 import "./RevenueDashboard.scss";
 
@@ -14,6 +21,7 @@ import RevenueBookingChart from "./components/RevenueBookingChart";
 import TopRoutesBarChart from "./components/TopRoutesBarChart";
 import TopRoutesPieChart from "./components/TopRoutesPieChart";
 import TopTripsTable from "./components/TopTripsTable";
+import TopCustomersCardList from "./components/TopCustomersCardList";
 
 function RevenueDashboard() {
     const [loading, setLoading] = useState(true);
@@ -21,6 +29,7 @@ function RevenueDashboard() {
     const [trendData, setTrendData] = useState([]);
     const [topRoutes, setTopRoutes] = useState([]);
     const [topTrips, setTopTrips] = useState([]);
+    const [topCustomers, setTopCustomers] = useState([]);
 
     // Filters
     const [period, setPeriod] = useState("day");
@@ -97,6 +106,23 @@ function RevenueDashboard() {
         }
     }, [fromDate, toDate]);
 
+    // Load top customers
+    const loadTopCustomers = useCallback(async () => {
+        try {
+            const response = await revenueService.getTopCustomers({
+                limit: 10,
+                from_date: fromDate,
+                to_date: toDate,
+            });
+            if (response.success) {
+                setTopCustomers(response.data.top_customers || []);
+            }
+        } catch (error) {
+            console.error("Error loading top customers:", error);
+            toast.error("Không thể tải top khách hàng");
+        }
+    }, [fromDate, toDate]);
+
     useEffect(() => {
         loadDashboard();
     }, [loadDashboard]);
@@ -105,7 +131,8 @@ function RevenueDashboard() {
         loadTrend();
         loadTopRoutes();
         loadTopTrips();
-    }, [loadTrend, loadTopRoutes, loadTopTrips]);
+        loadTopCustomers();
+    }, [loadTrend, loadTopRoutes, loadTopTrips, loadTopCustomers]);
 
     const handlePeriodChange = (newPeriod) => {
         setPeriod(newPeriod);
@@ -178,36 +205,82 @@ function RevenueDashboard() {
             {/* Dashboard Stats */}
             <RevenueStats dashboardData={dashboardData} period={period} />
 
-            {/* Date Range Filter for Charts */}
-            <RevenueFilters
-                period={period}
-                date={date}
-                fromDate={fromDate}
-                toDate={toDate}
-                onPeriodChange={handlePeriodChange}
-                onDateChange={setDate}
-                onFromDateChange={setFromDate}
-                onToDateChange={setToDate}
-                showDateRange={true}
-            />
+            {/* Check if filter bar should be wrapped or styled differently */}
+            <div className="revenue-dashboard__filter-bar">
+                <RevenueFilters
+                    period={period}
+                    date={date}
+                    fromDate={fromDate}
+                    toDate={toDate}
+                    onPeriodChange={handlePeriodChange}
+                    onDateChange={setDate}
+                    onFromDateChange={setFromDate}
+                    onToDateChange={setToDate}
+                    showDateRange={true}
+                />
+            </div>
 
             {/* Charts Grid */}
             <div className="revenue-dashboard__charts">
-                <ChartCard title="Xu hướng Doanh thu" icon="trend" subtitle="Biểu đồ doanh thu theo thời gian">
-                    <RevenueTrendChart data={trendData} />
-                </ChartCard>
+                <div className="revenue-dashboard__chart-card">
+                    <div className="revenue-dashboard__chart-header">
+                        <div className="revenue-dashboard__chart-icon">
+                            <TrendingUp size={20} />
+                        </div>
+                        <div>
+                            <h3 className="revenue-dashboard__chart-title">Xu hướng Doanh thu</h3>
+                            <p className="revenue-dashboard__chart-subtitle">Biểu đồ doanh thu theo thời gian</p>
+                        </div>
+                    </div>
+                    <div className="revenue-dashboard__chart-body">
+                        <RevenueTrendChart data={trendData} />
+                    </div>
+                </div>
 
-                <ChartCard title="Số lượng Vé bán" icon="activity" subtitle="Biểu đồ số vé đã bán">
-                    <RevenueBookingChart data={trendData} />
-                </ChartCard>
+                <div className="revenue-dashboard__chart-card">
+                    <div className="revenue-dashboard__chart-header">
+                        <div className="revenue-dashboard__chart-icon">
+                            <Activity size={20} />
+                        </div>
+                        <div>
+                            <h3 className="revenue-dashboard__chart-title">Số lượng Vé bán</h3>
+                            <p className="revenue-dashboard__chart-subtitle">Biểu đồ số vé đã bán</p>
+                        </div>
+                    </div>
+                    <div className="revenue-dashboard__chart-body">
+                        <RevenueBookingChart data={trendData} />
+                    </div>
+                </div>
 
-                <ChartCard title="Top Tuyến đường" icon="bar" subtitle="Doanh thu theo từng tuyến">
-                    <TopRoutesBarChart data={topRoutes} />
-                </ChartCard>
+                <div className="revenue-dashboard__chart-card">
+                    <div className="revenue-dashboard__chart-header">
+                        <div className="revenue-dashboard__chart-icon">
+                            <MapIcon size={20} />
+                        </div>
+                        <div>
+                            <h3 className="revenue-dashboard__chart-title">Top Tuyến đường</h3>
+                            <p className="revenue-dashboard__chart-subtitle">Doanh thu theo từng tuyến</p>
+                        </div>
+                    </div>
+                    <div className="revenue-dashboard__chart-body">
+                        <TopRoutesBarChart data={topRoutes} />
+                    </div>
+                </div>
 
-                <ChartCard title="Phân bổ Doanh thu" icon="pie" subtitle="Tỷ lệ doanh thu theo tuyến">
-                    <TopRoutesPieChart data={topRoutes} />
-                </ChartCard>
+                <div className="revenue-dashboard__chart-card">
+                    <div className="revenue-dashboard__chart-header">
+                        <div className="revenue-dashboard__chart-icon">
+                            <PieChart size={20} />
+                        </div>
+                        <div>
+                            <h3 className="revenue-dashboard__chart-title">Phân bổ Doanh thu</h3>
+                            <p className="revenue-dashboard__chart-subtitle">Tỷ lệ doanh thu theo tuyến</p>
+                        </div>
+                    </div>
+                    <div className="revenue-dashboard__chart-body">
+                        <TopRoutesPieChart data={topRoutes} />
+                    </div>
+                </div>
             </div>
 
             {/* Top Trips Table */}
@@ -219,6 +292,18 @@ function RevenueDashboard() {
                 </div>
                 <div className="revenue-dashboard__table-body">
                     <TopTripsTable data={topTrips} />
+                </div>
+            </div>
+
+            {/* Top Customers Card List */}
+            <div className="revenue-dashboard__table-card">
+                <div className="revenue-dashboard__chart-header">
+                    <h3 className="revenue-dashboard__chart-title">
+                        🏆 Top Khách hàng đặt vé nhiều nhất
+                    </h3>
+                </div>
+                <div className="revenue-dashboard__table-body">
+                    <TopCustomersCardList data={topCustomers} />
                 </div>
             </div>
         </div>

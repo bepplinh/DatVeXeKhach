@@ -28,7 +28,7 @@ const CouponManagement = lazy(() => import("../pages/AdminDashboard/CouponManage
 const RatingManagement = lazy(() => import("../pages/AdminDashboard/RatingManagement/RatingManagement"));
 const PaymentManagement = lazy(() => import("../pages/AdminDashboard/PaymentManagement/PaymentManagement"));
 const BookingSeatManagement = lazy(() => import("../pages/AdminDashboard/BookingSeatManagement/BookingSeatManagement"));
-const TripPerformance = lazy(() => import("../pages/AdminDashboard/TripPerformance/TripPerformance"));
+// TripPerformance removed
 const RevenueDashboard = lazy(() => import("../pages/AdminDashboard/RevenueDashboard/RevenueDashboard"));
 const RevenueAnalysis = lazy(() => import("../pages/AdminDashboard/RevenueAnalysis/RevenueAnalysis"));
 const ScheduleTemplate = lazy(() => import("../pages/AdminDashboard/ScheduleTemplate/ScheduleTemplate"));
@@ -75,7 +75,7 @@ export const ADMIN_ROUTES = [
     { path: "/admin/booking-seat", element: <BookingSeatManagement /> },
     { path: "/admin/schedule-templates", element: <ScheduleTemplate /> },
 
-    { path: "/admin/trip-performance", element: <TripPerformance /> },
+    // TripPerformance route removed
     { path: "/admin/revenue", element: <RevenueDashboard /> },
     { path: "/admin/revenue/analysis", element: <RevenueAnalysis /> },
 ];

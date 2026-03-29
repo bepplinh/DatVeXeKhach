@@ -298,11 +298,10 @@ const RouteOptimizationPage = () => {
                                 <button
                                     key={trip.id}
                                     type="button"
-                                    className={`route-opt__trip-card ${
-                                        isActive
-                                            ? "route-opt__trip-card--active"
-                                            : ""
-                                    }`}
+                                    className={`route-opt__trip-card ${isActive
+                                        ? "route-opt__trip-card--active"
+                                        : ""
+                                        }`}
                                     onClick={() => handleSelectTrip(trip)}
                                 >
                                     <div className="route-opt__trip-card-header">
@@ -399,11 +398,10 @@ const RouteOptimizationPage = () => {
                                     <button
                                         key={mode.key}
                                         type="button"
-                                        className={`route-opt__mode-card route-opt__mode-card--${mode.accent} ${
-                                            optimizeType === mode.key
-                                                ? "route-opt__mode-card--active"
-                                                : ""
-                                        }`}
+                                        className={`route-opt__mode-card route-opt__mode-card--${mode.accent} ${optimizeType === mode.key
+                                            ? "route-opt__mode-card--active"
+                                            : ""
+                                            }`}
                                         onClick={() => {
                                             setOptimizeType(mode.key);
                                             setOptimizationResult(null);
@@ -474,11 +472,10 @@ const RouteOptimizationPage = () => {
                                                 <button
                                                     key={location.address}
                                                     type="button"
-                                                    className={`route-opt__pill ${
-                                                        isActive
-                                                            ? "route-opt__pill--active"
-                                                            : ""
-                                                    }`}
+                                                    className={`route-opt__pill ${isActive
+                                                        ? "route-opt__pill--active"
+                                                        : ""
+                                                        }`}
                                                     onClick={() =>
                                                         handleSelectStart(
                                                             location.address
@@ -599,9 +596,6 @@ const RouteOptimizationPage = () => {
                                     </p>
                                     <div className="route-opt__timeline-meta">
                                         <span>Mã: {item.id}</span>
-                                        {item.booking_leg_id && (
-                                            <span>Booking leg #{item.booking_leg_id}</span>
-                                        )}
                                     </div>
                                 </div>
                             </div>

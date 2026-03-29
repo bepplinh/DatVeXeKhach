@@ -52,15 +52,34 @@ const TripForm = ({ open, onClose, onSubmit, initialData = null }) => {
                     adminBusService.getBuses({ per_page: 1000 }),
                 ]);
 
-                if (routesRes?.data) {
-                    // Handle both array and paginated response
-                    const routesData = routesRes.data;
-                    setRoutes(Array.isArray(routesData) ? routesData : (routesData?.data || []));
+                // Handle routes - check multiple possible response formats
+                if (routesRes) {
+                    let routesData = [];
+                    if (Array.isArray(routesRes)) {
+                        routesData = routesRes;
+                    } else if (Array.isArray(routesRes.data)) {
+                        routesData = routesRes.data;
+                    } else if (routesRes.data?.data && Array.isArray(routesRes.data.data)) {
+                        routesData = routesRes.data.data;
+                    } else if (routesRes.routes && Array.isArray(routesRes.routes)) {
+                        routesData = routesRes.routes;
+                    }
+                    setRoutes(routesData);
                 }
-                if (busesRes?.data) {
-                    // Handle both array and paginated response
-                    const busesData = busesRes.data;
-                    setBuses(Array.isArray(busesData) ? busesData : (busesData?.data || []));
+
+                // Handle buses - check multiple possible response formats
+                if (busesRes) {
+                    let busesData = [];
+                    if (Array.isArray(busesRes)) {
+                        busesData = busesRes;
+                    } else if (Array.isArray(busesRes.data)) {
+                        busesData = busesRes.data;
+                    } else if (busesRes.data?.data && Array.isArray(busesRes.data.data)) {
+                        busesData = busesRes.data.data;
+                    } else if (busesRes.buses && Array.isArray(busesRes.buses)) {
+                        busesData = busesRes.buses;
+                    }
+                    setBuses(busesData);
                 }
             } catch (error) {
                 console.error("Failed to load form data", error);
@@ -85,8 +104,8 @@ const TripForm = ({ open, onClose, onSubmit, initialData = null }) => {
                 bus_id: initialData.bus_id || "",
                 departure_time: initialData.departure_time
                     ? dayjs(initialData.departure_time).format(
-                          "YYYY-MM-DD HH:mm:ss"
-                      )
+                        "YYYY-MM-DD HH:mm:ss"
+                    )
                     : "",
                 status: initialData.status || "scheduled",
             });
@@ -354,8 +373,8 @@ const TripForm = ({ open, onClose, onSubmit, initialData = null }) => {
                     {loading
                         ? "Đang lưu..."
                         : initialData
-                        ? "Cập nhật"
-                        : "Thêm"}
+                            ? "Cập nhật"
+                            : "Thêm"}
                 </Button>
             </DialogActions>
         </Dialog>
